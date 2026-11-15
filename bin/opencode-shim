@@ -1,0 +1,13 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# managed by opencode-unlimited-warp
+#
+# No args + interactive terminal -> launcher menu (1 = run, 2 = install/repair)
+# Any args (run / serve / --version ...) -> straight through the WARP lane.
+# Bypass the menu once with:  OC_MENU_SKIP=1 opencode
+DEST="$HOME/.local/share/opencode-unlimited-warp"
+
+if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ] && [ -z "${OC_MENU_SKIP:-}" ] && [ -f "$DEST/scripts/menu.sh" ]; then
+  exec bash "$DEST/scripts/menu.sh"
+fi
+
+exec bash "$DEST/scripts/lane.sh" "$@"

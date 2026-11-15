@@ -1,0 +1,16 @@
+{
+  "name": "opencode-warp-retry-termux",
+  "version": "1.0.0",
+  "description": "warp-minimal recycle + retry on opencode free-limit (Termux lane)",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}

@@ -1,0 +1,6 @@
+13faa8a3c790abd7c5d4c1f7364fd888d7b836d886ba4ae1c7acbd0e836807b4  ./warp-minimal_v0.4.0_darwin_arm64/warp-minimal_v0.4.0_darwin_arm64.tar.gz
+e48af95636c89688c8bb766536437c90ada8d3cb053f97cede332431f84148ba  ./warp-minimal_v0.4.0_windows_arm64/warp-minimal_v0.4.0_windows_arm64.zip
+347603ea24ebbb5f305a17e1a85a601101d9e0e8e2fbb61cdc0d143da68abd3d  ./warp-minimal_v0.4.0_linux_amd64/warp-minimal_v0.4.0_linux_amd64.tar.gz
+4f3f218275f6d5ff1e028e818a00950ce53073a9d41c2c3171750d20b19dbada  ./warp-minimal_v0.4.0_darwin_amd64/warp-minimal_v0.4.0_darwin_amd64.tar.gz
+16914aa8213c94e7c0a7eb9085fe13fd3152db0d125fe1ce06f86822f4f8b031  ./warp-minimal_v0.4.0_linux_arm64/warp-minimal_v0.4.0_linux_arm64.tar.gz
+23cd9875146536fab6691470e8d0dc23f2c98b421a4303b9f952ca31ca84231e  ./warp-minimal_v0.4.0_windows_amd64/warp-minimal_v0.4.0_windows_amd64.zip
