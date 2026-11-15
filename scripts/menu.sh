@@ -252,7 +252,7 @@ unlimited_screen() {
     IFS= read -r c || return 0
     case "$c" in
       1) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-hop.sh"; pause_key; refresh_status ;;
-      2) printf '\n  TUI ke andar %s/tokens%s tool context %s batata hai.\n' "$CG" "$C0" "$C0"; pause_key ;;
+      2) printf '\n  TUI ke andar %s/tokens%s tool context batata hai.\n' "$CG" "$C0"; pause_key ;;
       0|"") return 0 ;;
     esac
   done
@@ -332,7 +332,7 @@ logs_menu() {
     printf '\n'
     printf '    %s1%s  opencode.log        %s%s%s\n' "$CB" "$C0" "$CD" "$HOME/.local/share/opencode/log/opencode.log" "$C0"
     printf '    %s2%s  warp-minimal.log    %s%s%s\n' "$CB" "$C0" "$CD" "$DEST/logs/warp-minimal.log" "$C0"
-    printf '    %s3%s  guard.log           %s%s%s\n' "$CB" "$C0" "$CD" "$DEST/guard/guard.log" "$C0"
+    printf '    %s3%s  guard.log           %s%s%s\n' "$CB" "$C0" "$CD" "$DEST/logs/guard.log" "$C0"
     printf '    %s4%s  daemon.log          %s%s%s\n' "$CB" "$C0" "$CD" "$DEST/logs/daemon.log" "$C0"
     printf '    %s5%s  plugin.log          %s%s%s\n' "$CB" "$C0" "$CD" "$PLUGIN_LOG" "$C0"
     printf '    %s0%s  Back\n' "$CB" "$C0"
@@ -341,7 +341,7 @@ logs_menu() {
     case "$c" in
       1) f="$HOME/.local/share/opencode/log/opencode.log" ;;
       2) f="$DEST/logs/warp-minimal.log" ;;
-      3) f="$DEST/guard/guard.log" ;;
+      3) f="$DEST/logs/guard.log" ;;
       4) f="$DEST/logs/daemon.log" ;;
       5) f="$PLUGIN_LOG" ;;
       0|"") return 0 ;;
@@ -394,6 +394,7 @@ uninstall_confirm() {
     y|Y)
       [ "$TTY" = 1 ] && clear
       if [ -f "$PKG_DIR/uninstall-warp-lane.sh" ]; then bash "$PKG_DIR/uninstall-warp-lane.sh"
+      elif [ -f "$DEST/scripts/uninstall-warp-lane.sh" ]; then bash "$DEST/scripts/uninstall-warp-lane.sh"
       else bash "$DEST/scripts/warp-stop.sh"; rm -rf "$DEST"; fi
       exit 0
       ;;

@@ -61,7 +61,7 @@ if [ -x "$HOME/.opencode/bin/opencode" ]; then
 fi
 
 # credit file (ours only — if the user added their own rules, those stay)
-if [ -f "$HOME/.opencode/AGENTS.md" ] && grep -q "ItzsagarOp" "$HOME/.opencode/AGENTS.md"; then
+if [ -f "$HOME/.opencode/AGENTS.md" ] && grep -q "ItzSagarOp" "$HOME/.opencode/AGENTS.md"; then
   rm -f "$HOME/.opencode/AGENTS.md"
   ok "credit file removed"
 fi

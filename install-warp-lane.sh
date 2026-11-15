@@ -151,7 +151,9 @@ cp "$SRC/bin/warp-minimal" "$DEST/bin/warp-minimal"
 cp "$SRC/bin/opencode-shim" "$DEST/bin/opencode-shim"
 cp "$SRC/scripts/"*.sh "$DEST/scripts/"
 [ -f "$SRC/scripts/config-util.py" ] && cp "$SRC/scripts/config-util.py" "$DEST/scripts/"
+rm -rf "$DEST/plugin/opencode-warp-retry"
 cp -r "$SRC/plugin/opencode-warp-retry" "$DEST/plugin/"
+cp "$SRC/uninstall-warp-lane.sh" "$DEST/scripts/uninstall-warp-lane.sh" 2>/dev/null || true
 if [ -d "$SRC/freecode" ]; then
   rm -rf "$DEST/freecode"
   cp -r "$SRC/freecode" "$DEST/freecode"

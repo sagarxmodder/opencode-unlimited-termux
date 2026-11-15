@@ -95,7 +95,7 @@ Keyless: LLM7 (`gpt-oss:20b`, `minimax-m2.7`, `DeepSeek-V4-Flash`,
 `glm-5.3-flash`, `codestral`) aur Pollinations (`openai-fast`). Optional keys:
 OpenRouter, Groq, Gemini, Cerebras, Mistral, GitHub Models, SambaNova, NVIDIA.
 Keyless tiers metered hain — LLM7 ka anonymous daily token quota, Pollinations
-~1 reply / 45s / IP. Tests: `cd freecode && npm test` (40, local-only).
+~1 reply / 45s / IP. Tests: `cd freecode && npm test` (41, local-only).
 
 ## Unlimited free models (v1 plugin)
 
@@ -178,9 +178,22 @@ update add kiya gaya hai.
 - **Hermetic tests:** CLI tests LLM7/Pollinations live APIs hit nahi karte.
 - **Fail summary:** sab models fail hone par first failure ka summary
   (`all N free models failed — …`) aata hai, last model ka ECONNREFUSED nahi.
-- **freecode UI:** prompt me active model + short session id, `/model`
-  numbered picker, `/sessions` + `/session <n|id>`, `/clear`, `/continue`,
-  Tab completion. Piped REPL input ab drop nahi hota (line queue).
+- **freecode UI:** opencode-jaisa card banner + framed composer (bottom border
+  par active model + short session id), `▌ assistant · model` block, braille
+  spinner, `✓ model · time` footer. Picker ke baad bare number (jaise `2`)
+  select karta hai, prompt nahi bhejta. `/model`, `/model <n|id|auto>`,
+  `/sessions`, `/session <n|id>`, `/clear`, `/continue`, Tab completion.
+  Piped REPL input ab drop nahi hota (line queue).
+- **Stream wipe fix:** purana spinner har delta par `\r\x1b[2K` bhej kar
+  streamed text mita raha tha (stray `?` artifact). Ab spinner sirf ek baar
+  clear hota hai; reply clean stream hoti hai.
+- **Edit `$` literals:** `edit` tool `$&`/`$1` ko replacement pattern ki tarah
+  interpret nahi karta; literal text save hota hai.
+- **Session cwd:** `--continue` sirf current directory ka latest session leta
+  hai (cross-directory fallback hataya).
+- **Robustness:** non-object config guard, guard log path `$DEST/logs/guard.log`,
+  installer plugin nested-copy cleanup, uninstaller credit casing, aur
+  uninstaller ab `$DEST/scripts/` me bhi ship hota hai (menu fallback).
 - **Install/uninstall UI:** dono scripts menu wali card UI, step dots aur
   summary use karte hain; uninstaller removed count + kept/reinstall dikhata hai.
 

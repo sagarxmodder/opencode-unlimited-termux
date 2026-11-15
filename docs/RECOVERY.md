@@ -106,11 +106,19 @@ Two healthy WARP exits were registered; the proxy reported
   milne par wrapper install karta hai; uninstaller sirf apna wrapper hatata hai.
 - **Hermetic CLI tests:** test config me LLM7/LM Studio/Pollinations keyless
   off, aur live proxy/key env vars cleared — suite local fake server par chalti
-  hai (40 tests).
+  hai (41 tests; Node 24+ ke liye `node --test test/*.test.js`).
 - **Fail summary:** ModelPool ab `all N free models failed — <first>: <reason>
   (+N more)` deta hai instead of last model ka ECONNREFUSED.
 - **Install/uninstall UI:** warp lane installer + uninstaller ab menu jaisi
-  card UI, step progress aur summary footer use karte hain.
+  card UI, step progress aur summary footer use karte hain. Uninstaller
+  `$DEST/scripts/uninstall-warp-lane.sh` par bhi ship hota hai.
+- **freecode opencode-style UI:** card banner, framed composer, assistant
+  block, braille spinner, timing/usage footer; bare picker numbers select
+  karte hain. Spinner har delta par line clear karke stream mita raha tha
+  (stray `?`), ab sirf ek baar clear hota hai.
+- **Small fixes:** `edit` `$&`/`$1` literals, non-object config guard,
+  strict-cwd `--continue`, guard log path, plugin nested-copy cleanup,
+  uninstaller credit casing. Tests 41.
 - **Device cleanup:** toota `hope2333-mirrorlist` dpkg record
   `--force-remove-reinstreq` se hataya; custom apt sources intact hain.
 

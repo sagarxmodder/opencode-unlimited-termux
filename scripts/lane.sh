@@ -47,7 +47,7 @@ EOF
   exit 127
 fi
 
-if ! curl -s -m 2 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'; then
+if ! curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'; then
   bash "$DEST/scripts/warp-start.sh" >&2 || exit 1
 fi
 

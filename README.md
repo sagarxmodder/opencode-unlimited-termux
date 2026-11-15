@@ -68,7 +68,9 @@ freecode models              # catalog
   healthy, so keyless quotas rotate with the exit; GitHub/npm stay direct.
 - Keyless tiers are still metered: LLM7 has an anonymous daily token quota and
   Pollinations allows roughly one reply per 45s per IP.
-- Tests: `cd freecode && npm test` (40 tests, local-only).
+- **opencode-style UI:** framed composer, assistant header, braille spinner,
+  and a timing footer; picker numbers select without a slash command.
+- Tests: `cd freecode && npm test` (41 tests, local-only).
 
 Full details: [`freecode/README.md`](freecode/README.md).
 
