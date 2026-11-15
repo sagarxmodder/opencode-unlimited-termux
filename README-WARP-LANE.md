@@ -81,11 +81,14 @@ flint, glm, minimax — koi bhi):
    `continue` se auto-resume karta hai. Retry unlimited hain, sirf 45s
    cooldown per session (loop guard).
 2. **Context wall** → usage har step par track hota hai; `maxOutputTokens`
-   remaining budget par cap hota hai; 85% par transcript handoff + session
-   compact (`/session/{id}/summarize`). Context-length error aane par bhi
-   khud compact karke agla turn chalne deta hai.
+   remaining budget par cap hota hai; **65%** par transcript handoff +
+   session compact (`/session/{id}/summarize`). Context-length error aane par
+   bhi force-compact karke auto-continue — error surface nahi hota.
+3. **Model unavailable** → next free model par failover (`free_models` tool se
+   list), phir continue.
+4. **Network reset/timeout** → quick retry, doosri baar par WARP rotate.
 
-Tools: `token_status`, `warp_rotate`, `handoff`, `compact_now`.
+Tools: `token_status`, `free_models`, `warp_rotate`, `handoff`, `compact_now`.
 Commands: `/tokens`, `/compact-now`, `/handoff`, `/resume`.
 Log: `~/.config/opencode/memory/unlimited-tokens.log`.
 

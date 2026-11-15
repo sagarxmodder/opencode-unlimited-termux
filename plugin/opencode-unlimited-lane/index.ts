@@ -1,18 +1,13 @@
 // opencode-unlimited-lane — v1 plugin for opencode 1.x (Termux warp lane)
 //
-// Two jobs, both model-agnostic (har har free model ke liye):
+// Makes every free model effectively unlimited:
+//   quota / 429 / 5xx   -> rotate WARP /64, retry the same model
+//   model unavailable   -> switch to the next free model and continue
+//   network reset/timeout -> retry, rotate on repeated hits
+//   context wall        -> cap output tokens, handoff, compact
 //
-//  1. quota bypass: on a free-limit / 429 / 5xx wall, rotate the WARP exit
-//     pool through the local proxy (/recycle), wait for a fresh healthy
-//     exit IP, then auto-continue the session on the new /64.
-//
-//  2. context guard: track usage from message.updated, cap maxOutputTokens
-//     to the remaining budget, hand off the transcript, and compact via
-//     POST /session/{id}/summarize before the context-length wall.
-//
-// Install: copy as a FLAT file to ~/.config/opencode/plugins/opencode-unlimited-lane.ts
-// (opencode 1.19.5 imports sub-directory index.ts but does not invoke it),
-// or list the absolute path in config `plugin`.
+// Install: flat file ~/.config/opencode/plugins/opencode-unlimited-lane.ts
+// (opencode 1.19.5 imports plugins/<dir>/index.ts but never calls it).
 
 import { tool } from "@opencode-ai/plugin"
 import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from "node:fs"
@@ -34,28 +29,43 @@ type Options = {
 }
 
 const DEFAULTS = {
-  warnAt: 0.7,
-  compactAt: 0.85,
-  handoffAt: 0.95,
-  cooldownMs: 180_000,
-  contextLimit: 200_000,
+  warnAt: 0.55,
+  compactAt: 0.65,
+  handoffAt: 0.75,
+  cooldownMs: 120_000,
+  contextLimit: 120_000,
   maxOutputFloor: 4_096,
   proxyUrl: "http://127.0.0.1:8789",
   maxRetries: 0,
-  retryCooldownMs: 45_000,
+  retryCooldownMs: 15_000,
   verbose: false,
 }
 
 const CONTEXT_ERROR =
   /maximum context length|requested token count exceeds|too many tokens|context length|prompt is too long|reduce the length of the messages/i
 
+const MODEL_ERROR =
+  /model[^.\n]{0,48}(not found|not available|unavailable|does not exist|deactivated|unsupported|disabled)|no access to (this |the )?model|invalid model|unknown model|model_not_found|no such model/i
+
 const QUOTA_ERROR =
   /free usage limit|quota|rate.?limit|too many requests|429|402|503|502|service unavailable|capacity|overloaded|try again later|usage limit|daily limit|limit reached|insufficient/i
 
+const NETWORK_ERROR =
+  /ECONNRESET|ECONNREFUSED|socket|fetch failed|cannot connect to api|network|timeout|timed out|proxy refused|econnaborted|etimedout/i
+
 type Budget = { budget: number; context: number; output: number; providerID: string; modelID: string }
 type Usage = { used: number; budget: number; ratio: number; at: number }
+type ModelRef = { providerID: string; modelID: string }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function providersFrom(res: any): any[] {
+  const root = res?.data ?? res
+  if (Array.isArray(root)) return root
+  if (Array.isArray(root?.providers)) return root.providers
+  if (Array.isArray(root?.providers?.data)) return root.providers.data
+  return []
+}
 
 export default async function unlimitedLane(input: any, rawOptions?: Options) {
   const options = { ...DEFAULTS, ...(rawOptions ?? {}) }
@@ -75,11 +85,15 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
   const usage = new Map<string, Usage>()
   const compacting = new Set<string>()
   const rotating = new Set<string>()
+  const continuing = new Set<string>()
   const lastCompact = new Map<string, number>()
   const lastWarn = new Map<string, number>()
   const lastHandoff = new Map<string, number>()
   const lastRetry = new Map<string, number>()
   const retries = new Map<string, number>()
+  const netRetries = new Map<string, number>()
+  const currentModel = new Map<string, ModelRef>()
+  let freeModels: ModelRef[] | null = null
   const verbose = options.verbose || process.env.OPENCODE_TOKENS_VERBOSE === "1"
 
   const now = () => Date.now()
@@ -93,7 +107,44 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
     }
   }
 
-  log(`lane plugin loaded (proxy ${proxy}, compact ${options.compactAt}, retries ${options.maxRetries})`)
+  log(`lane plugin loaded (proxy ${proxy}, compact ${options.compactAt}, retries ${options.maxRetries || "unlimited"})`)
+
+  // ---------------------------------------------------------------- free models
+
+  async function listFreeModels(): Promise<ModelRef[]> {
+    if (freeModels) return freeModels
+    const out: ModelRef[] = []
+    try {
+      const res: any = await client.config.providers()
+      for (const provider of providersFrom(res)) {
+        const models = provider?.models ?? {}
+        for (const id of Object.keys(models)) {
+          const model = models[id]
+          const cost = Number(model?.cost?.input ?? 0)
+          if (/-free$/i.test(id) || cost === 0) out.push({ providerID: provider.id, modelID: id })
+        }
+      }
+      out.sort((a, b) => {
+        const rank = (m: ModelRef) =>
+          /deepseek/i.test(m.modelID) ? 0 : /glm/i.test(m.modelID) ? 1 : /flint|minimax|beam/i.test(m.modelID) ? 2 : 3
+        return rank(a) - rank(b) || a.modelID.localeCompare(b.modelID)
+      })
+    } catch (error) {
+      log(`free model discovery failed: ${String(error)}`)
+    }
+    freeModels = out
+    return out
+  }
+
+  async function nextFreeModel(sessionID: string): Promise<ModelRef | undefined> {
+    const models = await listFreeModels()
+    if (!models.length) return undefined
+    const current = currentModel.get(sessionID)
+    const index = current
+      ? models.findIndex((m) => m.providerID === current.providerID && m.modelID === current.modelID)
+      : -1
+    return models[(index + 1 + models.length) % models.length]
+  }
 
   // ---------------------------------------------------------------- warp pool
 
@@ -111,12 +162,10 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
   }
 
   async function rotateWarp(): Promise<boolean> {
-    const before = new Set(await exits())
+    const before = await exits()
+    const beforeSet = new Set(before)
     try {
-      const res = await fetch(`${proxy}/recycle`, {
-        method: "POST",
-        signal: AbortSignal.timeout(10_000),
-      })
+      const res = await fetch(`${proxy}/recycle`, { method: "POST", signal: AbortSignal.timeout(10_000) })
       if (!res.ok && res.status !== 202) {
         log(`recycle rejected: ${res.status}`)
         return false
@@ -125,12 +174,12 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
       log(`recycle failed: ${String(error)}`)
       return false
     }
-    for (let i = 0; i < 40; i++) {
-      await sleep(1_000)
+    for (let i = 0; i < 25; i++) {
+      await sleep(500)
       const current = await exits()
-      const fresh = current.filter((ip) => !before.has(ip))
+      const fresh = current.filter((ip) => !beforeSet.has(ip))
       if (fresh.length > 0) {
-        log(`warp rotated: ${[...before].join(",") || "?"} -> ${fresh.join(",")}`)
+        log(`warp rotated: ${before.join(",") || "?"} -> ${fresh.join(",")}`)
         return true
       }
     }
@@ -143,13 +192,12 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
   async function resolveBudget(sessionID: string, info?: any): Promise<Budget> {
     const known = budgets.get(sessionID)
     if (known) return known
-    const providerID = info?.providerID
-    const modelID = info?.modelID
+    const providerID = info?.providerID ?? currentModel.get(sessionID)?.providerID
+    const modelID = info?.modelID ?? currentModel.get(sessionID)?.modelID
     if (providerID && modelID && client?.config?.providers) {
       try {
         const res: any = await client.config.providers()
-        const providers = res?.data ?? res
-        for (const provider of Array.isArray(providers) ? providers : []) {
+        for (const provider of providersFrom(res)) {
           if (provider?.id !== providerID) continue
           const model = provider?.models?.[modelID]
           const context = Number(model?.limit?.context) || 0
@@ -228,9 +276,9 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
 
   // ---------------------------------------------------------------- compaction
 
-  async function compact(sessionID: string, reason: string): Promise<boolean> {
+  async function compact(sessionID: string, reason: string, force = false): Promise<boolean> {
     if (!sessionID || compacting.has(sessionID)) return false
-    if (now() - (lastCompact.get(sessionID) ?? 0) < options.cooldownMs) return false
+    if (!force && now() - (lastCompact.get(sessionID) ?? 0) < options.cooldownMs) return false
     if (!client?.session?.summarize) {
       log("client.session.summarize missing; cannot compact")
       return false
@@ -259,47 +307,82 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
     }
   }
 
-  // ---------------------------------------------------------------- quota retry
+  // ---------------------------------------------------------------- retry
 
-  async function retryAfterRotation(sessionID: string, reason: string): Promise<boolean> {
+  async function continueSession(sessionID: string, model?: ModelRef): Promise<boolean> {
+    if (continuing.has(sessionID)) return false
+    continuing.add(sessionID)
+    try {
+      await client.session.prompt({
+        path: { id: sessionID },
+        body: {
+          parts: [{ type: "text", text: "continue", synthetic: true }],
+          ...(model ? { model } : {}),
+        },
+        query: { directory },
+      })
+      if (model) {
+        currentModel.set(sessionID, model)
+        log(`switched ${sessionID} to ${model.providerID}/${model.modelID}`)
+      }
+      log(`auto-continue sent on ${sessionID}`)
+      return true
+    } catch (error) {
+      log(`auto-continue failed: ${String(error)}`)
+      return false
+    } finally {
+      continuing.delete(sessionID)
+    }
+  }
+
+  async function retryAfterRotation(sessionID: string, reason: string, model?: ModelRef): Promise<boolean> {
     if (rotating.has(sessionID)) return false
     if (now() - (lastRetry.get(sessionID) ?? 0) < options.retryCooldownMs) return false
     if (options.maxRetries > 0 && (retries.get(sessionID) ?? 0) >= options.maxRetries) {
-      log(`retry budget exhausted for ${sessionID} (${options.maxRetries}); manual resend needed`)
+      log(`retry budget exhausted for ${sessionID} (${options.maxRetries})`)
       return false
     }
     rotating.add(sessionID)
     lastRetry.set(sessionID, now())
     retries.set(sessionID, (retries.get(sessionID) ?? 0) + 1)
     try {
-      log(`quota wall on ${sessionID} (${reason}); rotating WARP exit`)
+      log(`wall on ${sessionID} (${reason}); rotating WARP`)
       const ok = await rotateWarp()
       if (!ok) {
         log("rotation failed; leaving the error visible")
         return false
       }
-      await sleep(800)
-      await client.session.prompt({
-        path: { id: sessionID },
-        body: { parts: [{ type: "text", text: "continue", synthetic: true }] },
-        query: { directory },
-      })
-      log(`auto-continue sent on ${sessionID} via fresh WARP exit`)
-      return true
-    } catch (error) {
-      log(`auto-continue failed: ${String(error)}`)
-      return false
+      await sleep(600)
+      return await continueSession(sessionID, model)
     } finally {
       rotating.delete(sessionID)
     }
   }
 
+  async function retryNetwork(sessionID: string, reason: string): Promise<boolean> {
+    if (continuing.has(sessionID) || rotating.has(sessionID)) return false
+    if (now() - (lastRetry.get(sessionID) ?? 0) < 5_000) return false
+    const count = (netRetries.get(sessionID) ?? 0) + 1
+    netRetries.set(sessionID, count)
+    if (count % 2 === 0) {
+      log(`network instability (${reason}); rotating WARP`)
+      lastRetry.delete(sessionID)
+      return retryAfterRotation(sessionID, `network: ${reason}`)
+    }
+    lastRetry.set(sessionID, now())
+    log(`network blip (${reason}); quick retry`)
+    await sleep(600)
+    return continueSession(sessionID)
+  }
+
   function describe(sessionID: string): string {
     const last = usage.get(sessionID)
     const budget = budgets.get(sessionID)?.budget ?? options.contextLimit
+    const model = currentModel.get(sessionID)
     if (!last) return `context: no step measured yet (budget ${budget.toLocaleString()})`
     const state = compacting.has(sessionID) ? "compacting" : now() - last.at > 300_000 ? "stale" : "tracking"
     return [
+      `model: ${model ? `${model.providerID}/${model.modelID}` : "?"}`,
       `context: ${last.used.toLocaleString()} / ${last.budget.toLocaleString()} (${(last.ratio * 100).toFixed(1)}%)`,
       `thresholds: warn ${(options.warnAt * 100).toFixed(0)}% | compact ${(options.compactAt * 100).toFixed(0)}% | handoff ${(options.handoffAt * 100).toFixed(0)}%`,
       `warp retries: ${retries.get(sessionID) ?? 0}${options.maxRetries > 0 ? `/${options.maxRetries}` : " (unlimited)"}`,
@@ -324,16 +407,40 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
           return
         }
 
-        if (event.type === "session.error") {
-          const message = String(props.error?.data?.message ?? props.error?.message ?? "")
-          if (CONTEXT_ERROR.test(message)) {
-            log(`context error on ${sessionID}; compacting`)
-            await compact(sessionID, "context-length error")
+        const handleFailure = async (failure: string) => {
+          if (!failure) return
+          if (CONTEXT_ERROR.test(failure)) {
+            log(`context error on ${sessionID}; compacting + continuing`)
+            const done = await compact(sessionID, "context-length error", true)
+            if (done) {
+              lastRetry.delete(sessionID)
+              await sleep(900)
+              await continueSession(sessionID)
+            }
             return
           }
-          if (QUOTA_ERROR.test(message)) {
-            await retryAfterRotation(sessionID, message.slice(0, 120))
+          if (MODEL_ERROR.test(failure)) {
+            const next = await nextFreeModel(sessionID)
+            log(
+              `model unavailable on ${sessionID}: ${failure.slice(0, 120)}` +
+                (next ? ` -> ${next.providerID}/${next.modelID}` : " (no free fallback found)"),
+            )
+            await retryAfterRotation(sessionID, "model unavailable", next)
+            return
           }
+          if (QUOTA_ERROR.test(failure)) {
+            await retryAfterRotation(sessionID, failure.slice(0, 120))
+            return
+          }
+          if (NETWORK_ERROR.test(failure)) {
+            await retryNetwork(sessionID, failure.slice(0, 120))
+            return
+          }
+        }
+
+        if (event.type === "session.error") {
+          const message = String(props.error?.data?.message ?? props.error?.message ?? props.error?.name ?? "")
+          await handleFailure(message)
           return
         }
 
@@ -342,13 +449,8 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
         if (!info || info.role !== "assistant") return
 
         const failure = String(info.error?.data?.message ?? info.error?.data?.error ?? "")
-        if (CONTEXT_ERROR.test(failure)) {
-          log(`context error inside message on ${sessionID}; compacting`)
-          await compact(sessionID, "context-length error")
-          return
-        }
-        if (QUOTA_ERROR.test(failure)) {
-          await retryAfterRotation(sessionID, failure.slice(0, 120))
+        if (failure) {
+          await handleFailure(failure)
           return
         }
         if (info.summary) return
@@ -363,10 +465,12 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
           (tokens.cache?.write ?? 0)
         if (used < 1_000) return
 
+        if (info.providerID && info.modelID) currentModel.set(sessionID, { providerID: info.providerID, modelID: info.modelID })
         const budget = await resolveBudget(sessionID, info)
         const ratio = used / budget.budget
         usage.set(sessionID, { used, budget: budget.budget, ratio, at: now() })
         retries.delete(sessionID)
+        netRetries.delete(sessionID)
 
         if (verbose || ratio >= options.warnAt) {
           log(`usage ${sessionID} ${used}/${budget.budget} (${(ratio * 100).toFixed(1)}%)`)
@@ -394,7 +498,9 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
         const sessionID: string | undefined = params?.sessionID
         if (!sessionID) return
         const model = params?.model
-        if (model?.limit?.context > 0) {
+        if (!model) return
+        if (model.providerID && model.id) currentModel.set(sessionID, { providerID: model.providerID, modelID: model.id })
+        if (model.limit?.context > 0) {
           const context = Number(model.limit.context)
           const completion = Number(model.limit.output) || options.maxOutputFloor
           budgets.set(sessionID, {
@@ -410,7 +516,7 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
         if (!last || !budget) return
         const remaining = budget.context - last.used
         if (remaining <= 0) return
-        const cap = Math.max(options.maxOutputFloor, remaining - 2_048)
+        const cap = Math.max(1_024, remaining - 4_096)
         if (typeof output?.maxOutputTokens !== "number" || output.maxOutputTokens > cap) {
           output.maxOutputTokens = cap
           if (last.ratio >= options.warnAt) log(`capped maxOutputTokens to ${cap}`)
@@ -422,11 +528,21 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
 
     tool: {
       token_status: tool({
-        description: "Show context usage, compaction state, and WARP retry count for this session.",
+        description: "Show model, context usage, compaction state, and WARP retry count for this session.",
         args: {},
         async execute(_args: any, context: any) {
           const budget = await resolveBudget(context.sessionID)
           return `${describe(context.sessionID)}\nmodel budget: ${budget.budget.toLocaleString()} (context ${budget.context.toLocaleString()}, completion ${budget.output.toLocaleString()})`
+        },
+      }),
+      free_models: tool({
+        description: "List the free models this lane can fail over to, and show the current model.",
+        args: {},
+        async execute(_args: any, context: any) {
+          const models = await listFreeModels()
+          const current = currentModel.get(context.sessionID)
+          const lines = models.map((m) => `${m.providerID}/${m.modelID}${current?.modelID === m.modelID ? "  <- current" : ""}`)
+          return lines.length ? `free models (${lines.length}):\n${lines.join("\n")}` : "no free models discovered"
         },
       }),
       handoff: tool({
