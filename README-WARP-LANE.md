@@ -15,6 +15,14 @@ opencode
 
 ## Install
 
+One line (repo tarball se scripts + binary + plugin aate hain):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sagarxmodder/opencode-unlimited-termux/main/get.sh | bash
+```
+
+Local copy se:
+
 ```sh
 bash /storage/emulated/0/opencode-unlimited-termux/install-warp-lane.sh
 ```

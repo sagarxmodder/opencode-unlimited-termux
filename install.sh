@@ -16,6 +16,17 @@ case "${PREFIX:-}" in
       echo "  [termux] systemd installer → warp lane installer (no root)"
       exec bash "$SRC_DIR/install-warp-lane.sh" "$@"
     fi
+    # piped from `curl | bash`: no local files, fetch the tarball and run
+    echo "  [termux] fetching no-root warp lane (scripts + binary + plugin)"
+    TMP="${TMPDIR:-${PREFIX:-/tmp}/tmp}/ouc-lane.$$"
+    mkdir -p "$TMP" || exit 1
+    if ! curl -fsSL "https://codeload.github.com/sagarxmodder/opencode-unlimited-termux/tar.gz/refs/heads/main" \
+      | tar -xz -C "$TMP" --strip-components=1; then
+      rm -rf "$TMP"
+      echo "  ✗ fetch failed — use: curl -fsSL https://raw.githubusercontent.com/sagarxmodder/opencode-unlimited-termux/main/get.sh | bash" >&2
+      exit 1
+    fi
+    exec bash "$TMP/install-warp-lane.sh" "$@"
     ;;
 esac
 # ---------------------------------------------------------------------------
@@ -26,8 +37,8 @@ UNIT_KEEPER="/etc/systemd/system/${BRAND}-keeper.service"
 UNIT_GUARD="$HOME/.config/systemd/user/${BRAND}-guard.service"
 SHIM="$HOME/.local/bin/opencode"
 SUDOERS_FILE="/etc/sudoers.d/$BRAND"
-REPO="https://github.com/ELECTRONBreach/opencode-unlimited-usage"
-RAW="https://raw.githubusercontent.com/ELECTRONBreach/opencode-unlimited-usage/main"
+REPO="https://github.com/sagarxmodder/opencode-unlimited-termux"
+RAW="https://raw.githubusercontent.com/sagarxmodder/opencode-unlimited-termux/main"
 
 say(){ echo -e "  $*"; }
 ok(){ echo -e "  \e[32m✓\e[0m $*"; }
