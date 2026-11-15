@@ -16,7 +16,12 @@ NO_OPENCODE=0
 for arg in "$@"; do
   case "$arg" in
     --no-opencode) NO_OPENCODE=1 ;;
-    -h|--help) echo "usage: bash install-warp-lane.sh [--no-opencode]"; exit 0 ;;
+    -h|--help)
+      printf '\n  opencode unlimited · warp lane installer\n\n'
+      printf '  usage: bash install-warp-lane.sh [--no-opencode]\n\n'
+      printf '    --no-opencode   lane install karo, opencode install skip\n'
+      printf '    -h, --help      yeh help\n\n'
+      exit 0 ;;
   esac
 done
 
@@ -29,23 +34,30 @@ else
 fi
 
 STEP=0
+START_TS=$(date +%s 2>/dev/null || echo 0)
 section() {
   STEP=$((STEP + 1))
-  printf '\n  %s[%d/6]%s %s%s%s\n' "$CC" "$STEP" "$C0" "$CB" "$*" "$C0"
+  local dots="" i
+  for i in 1 2 3 4 5 6; do
+    if [ "$i" -le "$STEP" ]; then dots="${dots}● "; else dots="${dots}○ "; fi
+  done
+  printf '\n  %s%s%s  %s%s[%d/6]%s %s%s%s\n' "$CC" "$dots" "$C0" "$CD" "$CY" "$STEP" "$C0" "$CB" "$*" "$C0"
 }
-ok()   { printf '        %s✓%s %s\n' "$CG" "$C0" "$*"; }
-warn() { printf '        %s!%s %s\n' "$CY" "$C0" "$*"; }
-bad()  { printf '        %s✗%s %s\n' "$CR" "$C0" "$*"; }
-say()  { printf '        %s\n' "$*"; }
+ok()   { printf '    %s✓%s %s\n' "$CG" "$C0" "$*"; }
+warn() { printf '    %s!%s %s\n' "$CY" "$C0" "$*"; }
+bad()  { printf '    %s✗%s %s\n' "$CR" "$C0" "$*"; }
+say()  { printf '    %s%s%s\n' "$CGY" "$*" "$C0"; }
 die()  { bad "$*"; printf '\n'; exit 1; }
 
 banner() {
   printf '\n'
-  printf '  %s╭──────────────────────────────────────────────╮%s\n' "$CC" "$C0"
-  printf '    %sOPENCODE UNLIMITED%s  %s·  WARP LANE%s\n' "$CB" "$C0" "$CGY" "$C0"
-  printf '    Termux / no-root                 %s@ItzSagarOp%s\n' "$CD" "$C0"
-  printf '  %s╰──────────────────────────────────────────────╯%s\n' "$CC" "$C0"
-  printf '    %sinstaller%s\n' "$CD" "$C0"
+  printf '  %s╭────────────────────────────────────────────────────────────╮%s\n' "$CC" "$C0"
+  printf '    %sOPENCODE UNLIMITED%s  %s·  WARP LANE%s
+' "$CB" "$C0" "$CGY" "$C0"
+  printf '    Termux · no-root · no-systemd                 %s@ItzSagarOp%s
+' "$CD" "$C0"
+  printf '  %s╰────────────────────────────────────────────────────────────╯%s\n' "$CC" "$C0"
+  printf '    %sinstall plan%s  %s1 env · 2 opencode · 3 files · 4 tunnel · 5 launcher · 6 plugin%s\n' "$CB" "$C0" "$CD" "$C0"
 }
 
 banner
@@ -140,6 +152,10 @@ cp "$SRC/bin/opencode-shim" "$DEST/bin/opencode-shim"
 cp "$SRC/scripts/"*.sh "$DEST/scripts/"
 [ -f "$SRC/scripts/config-util.py" ] && cp "$SRC/scripts/config-util.py" "$DEST/scripts/"
 cp -r "$SRC/plugin/opencode-warp-retry" "$DEST/plugin/"
+if [ -d "$SRC/freecode" ]; then
+  rm -rf "$DEST/freecode"
+  cp -r "$SRC/freecode" "$DEST/freecode"
+fi
 chmod 700 "$DEST/bin/warp-minimal" "$DEST/bin/opencode-shim" "$DEST/scripts/"*.sh
 chmod 700 "$DEST/scripts/config-util.py" 2>/dev/null || true
 ok "runtime → $DEST"
@@ -213,6 +229,18 @@ for rc in "$HOME/.bashrc" "$HOME/.profile"; do
   fi
 done
 
+if [ -d "$DEST/freecode" ]; then
+  if command -v node >/dev/null 2>&1; then
+    if bash "$DEST/freecode/install.sh" >/dev/null 2>&1; then
+      ok "freecode installed (keyless: LLM7 + Pollinations)"
+    else
+      warn "freecode wrapper install fail — menu option 2 se retry"
+    fi
+  else
+    say "freecode copied — node chahiye: pkg install nodejs (menu → 2)"
+  fi
+fi
+
 # ---------------------------------------------------------------- 6. plugin
 section "opencode plugin"
 CFG_DIR="$HOME/.config/opencode"
@@ -272,15 +300,18 @@ fi
 date '+%Y-%m-%d %H:%M:%S' > "$DEST/INSTALLED"
 
 # ---------------------------------------------------------------- ready
+NOW_TS=$(date +%s 2>/dev/null || echo 0)
+ELAPSED=$(( NOW_TS - START_TS ))
+[ "$ELAPSED" -ge 0 ] 2>/dev/null || ELAPSED=0
 printf '\n'
-printf '  %s╭──────────────────────────────────────────────╮%s\n' "$CG" "$C0"
+printf '  %s╭────────────────────────────────────────────────────────────╮%s\n' "$CG" "$C0"
 printf '    %sREADY%s  %s·  warp lane installed%s\n' "$CB" "$C0" "$CG" "$C0"
-printf '  %s╰──────────────────────────────────────────────╯%s\n' "$CG" "$C0"
-printf '    %s%-26s%s %s\n' "$CB" "opencode" "$C0" "menu (1 opencode · 2 freecode)"
-printf '    %s%-26s%s %s\n' "$CB" "oc" "$C0" "menu shortcut"
-printf '    %s%-26s%s %s\n' "$CB" "opencode run \"...\"" "$C0" "direct lane"
-printf '    %s%-26s%s %s\n' "$CB" "opencode-unlimited-hop" "$C0" "fresh WARP /64"
-printf '    %s%-26s%s %s\n' "$CB" "opencode-unlimited-doctor" "$C0" "status"
+printf '  %s╰────────────────────────────────────────────────────────────╯%s\n' "$CG" "$C0"
+printf '    %s%-10s%s %s\n' "$CGY" "lane" "$C0" "127.0.0.1:8789 · WARP egress"
+printf '    %s%-10s%s %s\n' "$CGY" "menu" "$C0" "opencode → 1 · freecode → 2"
+printf '    %s%-10s%s %s\n' "$CGY" "run" "$C0" "opencode   ·   opencode run \"...\""
+printf '    %s%-10s%s %s\n' "$CGY" "tools" "$C0" "oc · opencode-unlimited-hop · -doctor"
+printf '    %s%-10s%s %s\n' "$CGY" "time" "$C0" "${ELAPSED}s"
 printf '\n'
 printf '    %snote:%s Termux band/reboot hone par pehli opencode run lane khud start karegi.\n' "$CD" "$C0"
 printf '\n'

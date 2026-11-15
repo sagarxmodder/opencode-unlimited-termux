@@ -10,7 +10,12 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 case "${PREFIX:-}" in
   *com.termux*)
     if [ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/uninstall-warp-lane.sh" ]; then
-      echo "  [termux] systemd uninstaller → warp lane uninstaller"
+      echo ""
+      echo "  ╭────────────────────────────────────────────────────────────╮"
+      echo "    OPENCODE UNLIMITED  ·  TERMUX"
+      echo "  ╰────────────────────────────────────────────────────────────╯"
+      echo "    systemd uninstaller → no-root warp lane uninstaller"
+      echo ""
       exec bash "$SRC_DIR/uninstall-warp-lane.sh" "$@"
     fi
     ;;
@@ -25,7 +30,10 @@ WARP="$(command -v warp-cli || echo /usr/bin/warp-cli)"
 ok(){ echo -e "  \e[32m✓\e[0m $*"; }
 
 echo ""
-echo "  removing Opencode Unlimited Usage…"
+echo "  ╭────────────────────────────────────────────────────────────╮"
+echo "    OPENCODE UNLIMITED  ·  LINUX / SYSTEMD"
+echo "  ╰────────────────────────────────────────────────────────────╯"
+echo "    uninstaller"
 echo ""
 
 # stop services first

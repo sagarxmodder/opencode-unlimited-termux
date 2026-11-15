@@ -43,20 +43,28 @@ find_opencode() {
   return 1
 }
 
+find_freecode_dir() {
+  for d in "$PKG_DIR/freecode" "$DEST/freecode" "$HOME/opencode-unlimited-termux/freecode"; do
+    [ -f "$d/bin/freecode" ] && { printf '%s\n' "$d"; return 0; }
+  done
+  return 1
+}
+
 run_freecode() {
-  local exe=""
+  local exe="" dir=""
+  dir="$(find_freecode_dir || true)"
   if command -v freecode >/dev/null 2>&1; then
     exe="$(command -v freecode)"
-  elif [ -f "$PKG_DIR/freecode/install.sh" ] && command -v node >/dev/null 2>&1; then
-    bash "$PKG_DIR/freecode/install.sh" >/dev/null 2>&1 || true
+  elif [ -n "$dir" ] && [ -f "$dir/install.sh" ] && command -v node >/dev/null 2>&1; then
+    bash "$dir/install.sh" >/dev/null 2>&1 || true
     hash -r
     command -v freecode >/dev/null 2>&1 && exe="$(command -v freecode)"
   fi
-  if [ -z "$exe" ] && command -v node >/dev/null 2>&1 && [ -f "$PKG_DIR/freecode/bin/freecode" ]; then
-    exe="node:$PKG_DIR/freecode/bin/freecode"
+  if [ -z "$exe" ] && command -v node >/dev/null 2>&1 && [ -n "$dir" ]; then
+    exe="node:$dir/bin/freecode"
   fi
   if [ -z "$exe" ]; then
-    printf '  %s✗ freecode missing — pkg install nodejs, phir: bash freecode/install.sh%s\n' "$CR" "$C0"
+    printf '  %s✗ freecode missing — pkg install nodejs, phir menu → 2%s\n' "$CR" "$C0"
     pause_key
     return 0
   fi
@@ -396,14 +404,16 @@ run_action() {
   local idx="$1"
   case "$idx" in
     0) [ "$TTY" = 1 ] && clear
-       if [ -z "$OC" ] && [ "$TTY" = 1 ] && [ -f "$PKG_DIR/scripts/install-opencode.sh" ]; then
+       local oc_install="$PKG_DIR/scripts/install-opencode.sh"
+       [ -f "$oc_install" ] || oc_install="$DEST/scripts/install-opencode.sh"
+       if [ -z "$OC" ] && [ "$TTY" = 1 ] && [ -f "$oc_install" ]; then
          printf '  %sopencode missing — auto-install try kar raha hoon%s\n\n' "$CY" "$C0"
-         bash "$PKG_DIR/scripts/install-opencode.sh" || true
+         bash "$oc_install" || true
          hash -r 2>/dev/null || true
          refresh_status
        fi
        if [ -z "$OC" ]; then
-         printf '  %s✗ opencode missing — Install/repair (2) chalao%s\n' "$CR" "$C0"; pause_key
+         printf '  %s✗ opencode missing — pkg install opencode%s\n' "$CR" "$C0"; pause_key
        else
          bash "$DEST/scripts/lane.sh" || true
          stty sane 2>/dev/null || true

@@ -13,11 +13,21 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 case "${PREFIX:-}" in
   *com.termux*)
     if [ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/install-warp-lane.sh" ]; then
-      echo "  [termux] systemd installer → warp lane installer (no root)"
+      echo ""
+      echo "  ╭────────────────────────────────────────────────────────────╮"
+      echo "    OPENCODE UNLIMITED  ·  TERMUX"
+      echo "  ╰────────────────────────────────────────────────────────────╯"
+      echo "    systemd installer → no-root warp lane"
+      echo ""
       exec bash "$SRC_DIR/install-warp-lane.sh" "$@"
     fi
     # piped from `curl | bash`: no local files, fetch the tarball and run
-    echo "  [termux] fetching no-root warp lane (scripts + binary + plugin)"
+    echo ""
+    echo "  ╭────────────────────────────────────────────────────────────╮"
+    echo "    OPENCODE UNLIMITED  ·  TERMUX"
+    echo "  ╰────────────────────────────────────────────────────────────╯"
+    echo "    fetching no-root warp lane (scripts + binary + plugin)"
+    echo ""
     TMP="${TMPDIR:-${PREFIX:-/tmp}/tmp}/ouc-lane.$$"
     mkdir -p "$TMP" || exit 1
     if ! curl -fsSL "https://codeload.github.com/sagarxmodder/opencode-unlimited-termux/tar.gz/refs/heads/main" \
@@ -49,9 +59,10 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]:-}")" 2>/dev/null && pwd)"
 [ -n "$SRC" ] && [ -d "$SRC/scripts" ] || SRC=""   # piped-from-curl: fetch from github
 
 echo ""
-echo "  ============================="
-echo "  Opencode Unlimited Usage"
-echo "  ============================="
+echo "  ╭────────────────────────────────────────────────────────────╮"
+echo "    OPENCODE UNLIMITED  ·  LINUX / SYSTEMD"
+echo "  ╰────────────────────────────────────────────────────────────╯"
+echo "    installer"
 echo ""
 
 # ---------------------------------------------------------------- platform
