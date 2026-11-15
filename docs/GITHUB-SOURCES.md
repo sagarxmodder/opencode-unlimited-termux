@@ -42,7 +42,7 @@ Latest `warp-minimal` release is still **v0.4.0** (published 2026-11-14) — not
 
 | Repo | Pushed | Reason |
 |---|---|---|
-| `ElectronBreach/opencode-unlimited-usage` | 2026-11-07 | Original upstream. Linux + systemd + `warp-cli` + iptables; cannot run here. Kept as reference in this folder. |
+| `opencode-unlimited-usage` | 2026-11-07 | Original upstream. Linux + systemd + `warp-cli` + iptables; cannot run here. Kept as reference in this folder. |
 | `asgtey/opencode-unlimited-v2` | 2026-11-13 | OpenCode 2.x port; WARP + fail-closed kill-switch, still systemd/root. |
 | `Oficina-do-Berg/CodeOpenFreedom` | 2026-11-15 | Windows 10/11 only. |
 | `nomaddxb2/kagujjecode` | 2026-11-14 | Two commits, unverified identity-spoofing/"abliterated" prompt injection. Not production-trustworthy. |
@@ -54,4 +54,4 @@ Latest `warp-minimal` release is still **v0.4.0** (published 2026-11-14) — not
 - warp-minimal — MIT, © Deury08.
 - opencode-warp-retry — MIT, © lipey1 (adapted).
 - Terminal layout inspiration — Suydev (MIT if present in that repo); no code copied.
-- Original bypass concept — ELECTRONBREACH/opencode-unlimited-usage.
+- Original bypass concept — opencode-unlimited-usage.

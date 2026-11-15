@@ -137,4 +137,4 @@ MIT license. Use it, fork it, just don't sell it to your grandma.
 
 — ItzSagarOp
 
-Based on the original ELECTRONBREACH project (MIT). Termux/no-root lane by @ItzSagarOp.
+Based on the opencode-unlimited-usage project (MIT). Termux/no-root lane by @ItzSagarOp.

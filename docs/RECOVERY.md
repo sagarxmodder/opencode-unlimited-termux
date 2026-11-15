@@ -17,7 +17,7 @@ No such file or directory
 
 State at that moment:
 
-- `~/opencode-unlimited-termux` cloned (ElectronBreach/opencode-unlimited-usage).
+- `~/opencode-unlimited-termux` cloned (opencode-unlimited-usage).
 - Scripts copied to `~/.local/share/opencode-unlimited/scripts/`.
 - Shim written to `~/.local/bin/opencode`.
 - No successful launch through the lane.

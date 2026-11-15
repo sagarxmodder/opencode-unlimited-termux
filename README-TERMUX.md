@@ -14,7 +14,7 @@
 > (`2a09:bac5:...`), and `opencode run "…LANE-OK"` → `LANE-OK`.
 > Details: `README-WARP-LANE.md`, `docs/RECOVERY.md`, `docs/GITHUB-SOURCES.md`.
 
-Termux (Android) adaptation of [ELECTRONBREACH/opencode-unlimited-usage](https://github.com/ELECTRONBREACH/opencode-unlimited-usage).
+Termux (Android) adaptation of [opencode-unlimited-usage](https://github.com/sagarxmodder/opencode-unlimited-termux).
 
 ## What this is
 

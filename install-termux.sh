@@ -1,7 +1,7 @@
 #!/bin/bash
 # Opencode Unlimited Usage — Termux-adapted installer
 # Made by @ItzSagarOp
-# Source: https://github.com/ELECTRONBREACH/opencode-unlimited-usage
+# Source: https://github.com/sagarxmodder/opencode-unlimited-termux
 set -u
 
 BRAND="opencode-unlimited"
