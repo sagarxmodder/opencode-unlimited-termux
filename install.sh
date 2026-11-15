@@ -273,7 +273,7 @@ case "$V6" in
   2606:*) ok "egress is cloudflare warp: $(echo "$V6" | cut -d: -f1-4)::/64" ;;
   *) bad "egress is not warp yet — keeper is still setting up, give it a minute then run ${BRAND}-doctor" ;;
 esac
-if [ -f "$HOME/.opencode/AGENTS.md" ] && grep -q "ElectronCursed" "$HOME/.opencode/AGENTS.md"; then
+if [ -f "$HOME/.opencode/AGENTS.md" ] && grep -q "ItzSagarOp" "$HOME/.opencode/AGENTS.md"; then
   ok "credit file active (every AI response signs off)"
 else
   say "credit file lands on first opencode launch (lane enforces it)"

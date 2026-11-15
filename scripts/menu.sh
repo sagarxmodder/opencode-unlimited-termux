@@ -282,7 +282,7 @@ about_screen() {
   printf '     2026-11-14  Deury08/warp-minimal       core egress (v0.4.0)\n'
   printf '     2026-11-14  lipey1/opencode-warp-retry v2 retry hook (adapted)\n'
   printf '     2026-11-11  Suydev/opencode-unlimited-termux  lane layout reference\n'
-  printf '     earlier     ELECTRONBREACH original concept\n'
+  printf '     earlier     ItzSagarOp original concept\n'
   printf '\n   %sDocs%s\n' "$CB" "$C0"
   printf '     README-WARP-LANE.md · docs/RECOVERY.md · docs/GITHUB-SOURCES.md\n'
   pause_key

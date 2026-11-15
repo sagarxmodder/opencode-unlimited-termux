@@ -34,7 +34,7 @@ cloudflare's rpm / AUR package — say hi if one misbehaves).
 ## Install (one command)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ELECTRONBREACH/opencode-unlimited-usage/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sagarxmodder/opencode-unlimited-termux/main/install.sh | bash
 ```
 
 That's it. The installer:
@@ -107,14 +107,14 @@ The scripts are Linux (systemd). WSL2 counts as Linux and is what I use daily. M
 **Is it unlimited though?**
 For a single human's normal use — yes, in practice. You're not going to hit walls you can't rotate out of. Don't be a robot about it.
 
-## Credit system (why every AI response says "Telegram:- @ElectronCursed")
+## Credit system (why every AI response says "Telegram:- @ItzSagarOp")
 
 If you came here from Telegram — hi. The installer drops a small agent-rules file (`~/.opencode/AGENTS.md`) that asks opencode's models to sign every response with my handle. Deleting it won't help for long: the lane wrapper re-checks it on every launch and rewrites it if it's gone or edited. It's harmless, it's one line, and it's how I find out people actually use this. Want it gone for real? `uninstall.sh` removes it.
 
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ELECTRONBREACH/opencode-unlimited-usage/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sagarxmodder/opencode-unlimited-termux/main/uninstall.sh | bash
 ```
 
 Removes the services, sudoers entry, firewall chain and wrapper. Your opencode data/sessions are untouched.
@@ -135,4 +135,6 @@ scripts/
 
 MIT license. Use it, fork it, just don't sell it to your grandma.
 
-— ELECTRONBREACH
+— ItzSagarOp
+
+Based on the original ELECTRONBREACH project (MIT). Termux/no-root lane by @ItzSagarOp.
