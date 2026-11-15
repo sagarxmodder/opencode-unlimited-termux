@@ -87,6 +87,7 @@ json_get() { python3 -c "import json,sys;d=json.load(sys.stdin);print($1)" 2>/de
 
 refresh_status() {
   local tmp H EJ TR T0 T1 pid
+  OC="$(find_opencode || true)"
   tmp="${TMPDIR:-${PREFIX:-/tmp}/tmp}/ocmenu.$$"
   mkdir -p "$tmp" 2>/dev/null || tmp="/data/data/com.termux/files/usr/tmp"
 
@@ -96,7 +97,7 @@ refresh_status() {
     curl -sS --noproxy "" -m 6 -x "$PROXY" https://www.cloudflare.com/cdn-cgi/trace > "$tmp/t" 2>/dev/null
     T1="$(date +%s%3N 2>/dev/null || echo 0)"
     printf '%s %s\n' "$T0" "$T1" > "$tmp/lat" ) & local pt=$!
-  ( if OC="$(find_opencode)"; then
+  ( if [ -n "$OC" ]; then
       "$OC" --version 2>/dev/null | head -n1 > "$tmp/v"
     else
       printf 'missing\n' > "$tmp/v"
@@ -398,6 +399,7 @@ run_action() {
        if [ -z "$OC" ] && [ "$TTY" = 1 ] && [ -f "$PKG_DIR/scripts/install-opencode.sh" ]; then
          printf '  %sopencode missing — auto-install try kar raha hoon%s\n\n' "$CY" "$C0"
          bash "$PKG_DIR/scripts/install-opencode.sh" || true
+         hash -r 2>/dev/null || true
          refresh_status
        fi
        if [ -z "$OC" ]; then

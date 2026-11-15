@@ -15,7 +15,9 @@ done
 
 if [ -f "$HOME/.local/bin/opencode" ] && grep -q "opencode-unlimited-warp" "$HOME/.local/bin/opencode" 2>/dev/null; then
   rm -f "$HOME/.local/bin/opencode"
-  echo "[ok] shim removed (stock opencode still at \$(command -v opencode) via /usr/bin)"
+  hash -r 2>/dev/null || true
+  stock="$(command -v opencode 2>/dev/null || true)"
+  echo "[ok] shim removed${stock:+ (stock opencode: $stock)}"
 fi
 
 CFG_DIR="$HOME/.config/opencode"
