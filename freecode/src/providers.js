@@ -650,7 +650,7 @@ export class ModelPool {
   async chat(options) {
     const list = this.candidates(options.preferred)
     if (!list.length) throw new Error(this.setupMessage())
-    let lastError = null
+    const failures = new Map()
     for (let pass = 0; pass < 2; pass++) {
       if (options.signal?.aborted) throw new AbortedError()
       let attempted = 0
@@ -663,12 +663,19 @@ export class ModelPool {
         } catch (error) {
           if (classifyError(error) === "context") throw error
           if (error instanceof AbortedError || options.signal?.aborted) throw new AbortedError()
-          lastError = error
+          if (!failures.has(entry.id)) failures.set(entry.id, error)
         }
       }
       if (pass === 0) await sleep(attempted === 0 ? 250 : 750, options.signal)
     }
-    throw lastError || new Error("every free model failed")
+    if (failures.size) {
+      const [id, first] = failures.entries().next().value
+      const more = failures.size > 1 ? ` (+${failures.size - 1} more)` : ""
+      const error = new Error(`all ${failures.size} free models failed — ${id}: ${describeError(first)}${more}`)
+      error.cause = first
+      throw error
+    }
+    throw new Error("every free model failed")
   }
 
   setupMessage() {

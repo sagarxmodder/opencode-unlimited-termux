@@ -31,14 +31,20 @@ Options:
   -h, --help                    Show this help
 
 Commands in the REPL:
-  /help  /model [id]  /models [all]  /new  /status  /retry  /quit
+  /help  /model [n|id|auto]  /models [all]  /sessions  /session <n|id>
+  /new  /clear  /continue  /status  /retry  /quit
+
+Model switching: /model alone shows a numbered picker, /model 3 switches.
+Sessions: /sessions lists recent ones, /session 2 loads, /new starts fresh.
 
 Provider keys come from environment variables:
   OPENROUTER_API_KEY  GROQ_API_KEY       GEMINI_API_KEY
   CEREBRAS_API_KEY    MISTRAL_API_KEY    GITHUB_TOKEN
   SAMBANOVA_API_KEY   NVIDIA_API_KEY     POLLINATIONS_API_KEY
+  LLM7_API_KEY
 
-Local models need no key: Ollama on 127.0.0.1:11434, LM Studio on 127.0.0.1:1234.
+Keyless: LLM7 and Pollinations need no key. Local models also need none:
+Ollama on 127.0.0.1:11434, LM Studio on 127.0.0.1:1234.
 HTTPS_PROXY and NO_PROXY are honored.`)
 }
 
@@ -129,6 +135,59 @@ async function runPrompt(state, text) {
   return ok
 }
 
+function readyChoices(state) {
+  const ready = new Set(state.pool.candidates().map((entry) => entry.id))
+  return state.catalog.filter((entry) => ready.has(entry.id))
+}
+
+function activeModel(state) {
+  return state.agent?.lastModel?.id || state.config.preferred?.[0] || state.config.model || "auto"
+}
+
+function modelPicker(state) {
+  const { ui } = state
+  const list = readyChoices(state)
+  const current = activeModel(state)
+  if (!list.length) {
+    ui.info("Koi ready model nahi — keys export karo ya `freecode doctor` chalao.")
+    return
+  }
+  ui.line(ui.bold(`model switch (${list.length} ready)`))
+  list.forEach((entry, index) => {
+    const mark = entry.id === current ? "*" : " "
+    const context = entry.context ? `${Math.round(entry.context / 1000)}k` : "?"
+    ui.line(` ${String(index + 1).padStart(2)}.${mark} ${entry.id.padEnd(26)} ${String(entry.provider).padEnd(12)} ${context.padStart(5)} ${entry.tools ? "tools" : "no-tools"}`)
+  })
+  ui.info("pick: /model <n> · direct: /model <id> · auto: /model auto · catalog: /models all")
+}
+
+function sessionChoices(state) {
+  const listed = Session.list(state.config)
+  if (!listed.some((item) => item.id === state.session.id)) {
+    listed.unshift({
+      id: state.session.id,
+      cwd: state.session.cwd,
+      updatedAt: state.session.updatedAt,
+      messages: state.session.messageCount,
+      mtime: Date.now()
+    })
+  }
+  return listed
+}
+
+function sessionPicker(state) {
+  const { ui } = state
+  const all = sessionChoices(state)
+  const list = all.slice(0, 10)
+  ui.line(ui.bold(`sessions (${all.length})`))
+  list.forEach((item, index) => {
+    const mark = item.id === state.session.id ? "*" : " "
+    const cwd = item.cwd ? truncate(item.cwd, 30) : "—"
+    ui.line(` ${String(index + 1).padStart(2)}.${mark} ${item.id} ${String(item.messages).padStart(3)} msgs ${String(item.updatedAt || "").slice(0, 19)} ${cwd}`)
+  })
+  ui.info("switch: /session <n|id> · latest: /continue · new: /new · clear: /clear")
+}
+
 async function handleCommand(state, input) {
   const { ui, config, pool, cwd } = state
   const [name, ...rest] = input.trim().split(/\s+/)
@@ -140,31 +199,120 @@ async function handleCommand(state, input) {
     case "/quit":
     case "/exit":
       return true
-    case "/model":
+    case "/model": {
       if (!arg) {
-        const last = pool.lastWinner ? ` · last ${pool.lastWinner}` : ""
-        ui.info(`model: ${config.model}${last}`)
+        modelPicker(state)
         return false
       }
-      config.model = arg
-      config.preferred = arg === "auto" ? [] : [arg]
-      ui.info(`model set to ${arg}${arg === "auto" ? " (failover order)" : ""}`)
+      if (arg === "auto") {
+        config.model = "auto"
+        config.preferred = []
+        state.agent.lastModel = null
+        ui.info("model → auto (best free failover)")
+        return false
+      }
+      if (arg === "all") {
+        listModels(ui, state.catalog, pool, { all: true })
+        return false
+      }
+      const list = readyChoices(state)
+      const index = Number(arg)
+      let entry = null
+      if (Number.isInteger(index) && index > 0) {
+        if (!list.length) {
+          ui.info("Koi ready model nahi — `freecode doctor` chalao.")
+          return false
+        }
+        if (index > list.length) {
+          ui.error(`model number out of range 1..${list.length}`)
+          return false
+        }
+        entry = list[index - 1]
+      } else {
+        entry = state.catalog.find((item) => item.id === arg || item.model === arg) || null
+      }
+      if (entry) {
+        config.model = entry.id
+        config.preferred = [entry.id]
+        state.agent.lastModel = null
+        ui.info(`model → ${entry.id} (${entry.provider})`)
+      } else {
+        config.model = arg
+        config.preferred = [arg]
+        state.agent.lastModel = null
+        ui.info(`model → ${arg}`)
+      }
       return false
+    }
     case "/models":
       listModels(ui, state.catalog, pool, { all: arg === "all" })
       return false
+    case "/sessions":
+    case "/session": {
+      if (name === "/sessions" || !arg) {
+        sessionPicker(state)
+        return false
+      }
+      if (arg === "new") {
+        state.session = Session.create(config, cwd)
+        state.agent = createAgent(state)
+        ui.info(`new session ${state.session.id}`)
+        return false
+      }
+      const all = sessionChoices(state)
+      const index = Number(arg)
+      let target = null
+      if (Number.isInteger(index) && index > 0) {
+        const shown = Math.min(all.length, 10)
+        if (index > shown) {
+          ui.error(`session number out of range 1..${shown}`)
+          return false
+        }
+        target = all[index - 1]
+      } else {
+        target = { id: arg }
+      }
+      if (target.id === state.session.id) {
+        ui.info(`session already active: ${state.session.id}`)
+        return false
+      }
+      const session = Session.load(config, target.id)
+      if (!session) {
+        ui.error(`session not found: ${arg}`)
+        return false
+      }
+      state.session = session
+      state.agent = createAgent(state)
+      ui.info(`session → ${session.id} (${session.messageCount} msgs)`)
+      return false
+    }
     case "/new":
+    case "/clear":
       state.session = Session.create(config, cwd)
       state.agent = createAgent(state)
       ui.info(`new session ${state.session.id}`)
       return false
+    case "/continue": {
+      const latest = Session.latest(config, cwd)
+      if (!latest) {
+        ui.info("no saved sessions for this directory")
+        return false
+      }
+      state.session = latest
+      state.agent = createAgent(state)
+      ui.info(`session → ${latest.id} (${latest.messageCount} msgs)`)
+      return false
+    }
     case "/status": {
       const cooling = [...pool.coolingUntil.entries()].filter(([, until]) => until > Date.now())
+      const last = state.agent.lastModel
+      const provider = last ? pool.providerFor(last) : null
       const lines = [
+        `model    ${config.model}${last ? ` · last ${last.id}` : ""}`,
+        `provider ${provider?.name || "—"}`,
         `session  ${state.session.id}`,
         `messages ${state.session.messageCount}`,
         `cwd      ${cwd}`,
-        `model    ${config.model}${state.agent.lastModel ? ` · last ${state.agent.lastModel.id}` : ""}`,
         `ready    ${pool.candidates().length}/${state.catalog.length} models`,
         `file     ${state.session.file}`
       ]
@@ -197,7 +345,7 @@ function listModels(ui, catalog, pool, { all = false } = {}) {
     ui.info("Koi model ready nahi. `freecode doctor` chalao, ya `freecode models` se catalog dekho.")
     return
   }
-  ui.line(ui.bold(`models (${readyIds.size} ready / ${catalog.length} total)`))
+  ui.line(ui.bold(`models (${readyIds.size} ready / ${catalog.length} total) · /model <n> picks a ready one`))
   const groups = new Map()
   for (const entry of list) {
     if (!groups.has(entry.provider)) groups.set(entry.provider, [])
@@ -330,7 +478,16 @@ export async function main(argv = process.argv.slice(2)) {
 
   const summary = catalogSummary(catalog, pool)
   const configFiles = configPaths(cwd).filter((file) => fs.existsSync(file))
-  ui.banner({ version: VERSION, cwd, ready: summary.ready, total: summary.total, configFiles })
+  ui.banner({
+    version: VERSION,
+    cwd,
+    ready: summary.ready,
+    total: summary.total,
+    configFiles,
+    model: activeModel(state),
+    session: state.session.id,
+    messages: state.session.messageCount
+  })
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -339,9 +496,49 @@ export async function main(argv = process.argv.slice(2)) {
     historySize: 200
   })
   ui.rl = rl
+  const setPrompt = () => ui.setContext({
+    model: activeModel(state),
+    session: state.session.id
+  })
+  rl.completer = (line) => {
+    const text = String(line)
+    if (text.startsWith("/model") && text.includes(" ")) {
+      const arg = text.slice(text.indexOf(" ") + 1)
+      const ids = readyChoices(state).map((entry) => entry.id)
+      return [ids.filter((id) => id.startsWith(arg)), arg]
+    }
+    if (text.startsWith("/session") && text.includes(" ")) {
+      const arg = text.slice(text.indexOf(" ") + 1)
+      const ids = sessionChoices(state).map((item) => item.id)
+      return [ids.filter((id) => id.startsWith(arg)), arg]
+    }
+    const commands = ["/help", "/model", "/models", "/sessions", "/session", "/new", "/clear", "/continue", "/status", "/retry", "/quit"]
+    return [commands.filter((command) => command.startsWith(text)), text]
+  }
+  setPrompt()
   let closed = false
+  const queued = []
+  let waiter = null
+  const takeLine = () => {
+    if (queued.length) return Promise.resolve(queued.shift())
+    return new Promise((resolve) => { waiter = resolve })
+  }
+  rl.on("line", (line) => {
+    if (waiter) {
+      const resolve = waiter
+      waiter = null
+      resolve(line)
+    } else {
+      queued.push(line)
+    }
+  })
   rl.on("close", () => {
     closed = true
+    if (waiter) {
+      const resolve = waiter
+      waiter = null
+      resolve(null)
+    }
   })
   rl.on("SIGINT", () => {
     if (activeAbort) {
@@ -354,7 +551,10 @@ export async function main(argv = process.argv.slice(2)) {
   })
 
   while (!closed) {
-    const answer = await ui.ask()
+    setPrompt()
+    rl.setPrompt(ui.promptText())
+    rl.prompt()
+    const answer = await takeLine()
     if (answer === null) break
     const text = answer.trim()
     if (!text) continue

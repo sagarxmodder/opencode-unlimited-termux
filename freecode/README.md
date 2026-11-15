@@ -12,6 +12,7 @@ freecode "fix the failing test in src/app.test.js"
 - Per-provider API key rotation (comma-separated keys), cooldowns, and model penalty memory.
 - Retries without tools when a provider rejects function calling.
 - Streaming output, tool calls, sessions, context trimming and retry on context overflow.
+- REPL pickers: `/model` lists ready models by number, `/sessions` lists saved sessions, and the prompt shows the active model + short session id.
 - Built-in tools: `read`, `write`, `edit`, `glob`, `grep`, `bash`, `webfetch`.
 - OpenRouter free-model discovery (cached), plus a curated fallback catalog.
 - Local models via Ollama or LM Studio; no key required.
@@ -29,7 +30,7 @@ cd freecode
 bash install.sh
 ```
 
-The script links `bin/freecode` into `$PREFIX/bin` on Termux, or `~/.local/bin` otherwise. You can also run it directly:
+On Termux with the warp lane installed, skip this: `oc` → `2` installs and launches freecode from `~/.local/share/opencode-unlimited-warp/freecode`. Standalone, the script links `bin/freecode` into `$PREFIX/bin` on Termux, or `~/.local/bin` otherwise. You can also run it directly:
 
 ```bash
 node /path/to/freecode/bin/freecode --help
@@ -85,7 +86,31 @@ freecode --offline                # skip OpenRouter discovery
 
 Options: `--max-steps <n>`, `--timeout <seconds>`, `--no-color`, `--version`, `--help`.
 
-REPL commands: `/help`, `/model [id]`, `/models [all]`, `/new`, `/status`, `/retry`, `/quit`.
+REPL commands:
+
+| Command | Action |
+| --- | --- |
+| `/help` | command reference |
+| `/model` | numbered picker of ready models |
+| `/model <n>` | switch by picker number |
+| `/model <id>` | switch by catalog id or upstream model name |
+| `/model auto` | back to automatic failover |
+| `/models [all]` | catalog (only ready models, or everything) |
+| `/sessions` | recent sessions for this directory, numbered |
+| `/session <n\|id>` | switch to a session |
+| `/new` · `/clear` | new session |
+| `/continue` | latest session for this directory |
+| `/status` | model, provider, session, context, cooldowns |
+| `/retry` | resend the previous prompt |
+| `/quit` | exit |
+
+The prompt shows live context:
+
+```
+freecode [llm7-gpt-oss-20b · s:6217] ›
+```
+
+Tab completion works for commands, model ids and session ids.
 
 ## Failover behavior
 
@@ -150,7 +175,7 @@ HTTPS requests use a CONNECT tunnel followed by TLS. Local addresses bypass the 
 npm test
 ```
 
-The suite covers SSE parsing, JSON responses, failover, key rotation, tool fallback, providers, sessions, file tools, the agent loop, and the CLI against a local fake OpenAI server.
+40 local-only tests cover SSE parsing, JSON responses, failover, key rotation, tool fallback, proxy CONNECT, provider summaries, sessions, file tools, the agent loop, and the CLI REPL (banner, model/session pickers) against a local fake OpenAI server. No live provider is called.
 
 ## Notes
 

@@ -30,6 +30,7 @@ export class UI {
     this.spinFrame = 0
     this.streaming = false
     this.rl = null
+    this.context = { model: "", session: "" }
   }
 
   paint(code, text) {
@@ -46,13 +47,19 @@ export class UI {
   write(text) { this.stdout.write(text) }
   line(text = "") { this.write(`${text}\n`) }
 
-  banner({ version, cwd, ready, total, configFiles = [] }) {
+  banner({ version, cwd, ready, total, configFiles = [], model = "", session = "", messages = 0 }) {
     this.line(`${this.bold(`freecode ${version}`)} ${this.dim("· free models with automatic failover")}`)
     this.line(this.dim(`cwd     ${cwd}`))
     this.line(this.dim(`models  ${ready}/${total} ready`))
+    if (model) this.line(this.dim(`model   ${model}`))
+    if (session) this.line(this.dim(`session ${session} · ${messages} msgs`))
     if (configFiles.length) this.line(this.dim(`config  ${configFiles.join("  ")}`))
-    this.line(this.dim("type /help for commands · Ctrl+C stops a reply"))
+    this.line(this.dim("type /help · /model · /sessions · Ctrl+C stops a reply"))
     this.line()
+  }
+
+  setContext({ model = "", session = "" } = {}) {
+    this.context = { model, session }
   }
 
   startSpinner(label = "thinking") {
@@ -120,7 +127,11 @@ export class UI {
   }
 
   promptText() {
-    return "freecode> "
+    const { model, session } = this.context || {}
+    const bits = []
+    if (model) bits.push(truncate(model, 26))
+    if (session) bits.push(`s:${session.slice(-4)}`)
+    return bits.length ? `freecode [${bits.join(" · ")}] › ` : "freecode › "
   }
 
   ask() {

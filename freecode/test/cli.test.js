@@ -81,6 +81,23 @@ test("CLI REPL accepts piped commands", async (t) => {
   assert.match(run.stdout, /messages 0/)
 })
 
+test("CLI REPL exposes model and session pickers", async (t) => {
+  const { dir, env } = await setup(t)
+  const run = await runCli({
+    args: ["--offline", "--no-color"],
+    cwd: dir,
+    env,
+    input: "/model\n/model 1\n/sessions\n/status\n/quit\n"
+  })
+  assert.equal(run.code, 0, run.stderr)
+  assert.match(run.stdout, /model switch \(3 ready\)/)
+  assert.match(run.stdout, /model → ollama-qwen25-coder/)
+  assert.match(run.stdout, /sessions \(1\)/)
+  assert.match(run.stdout, /switch: \/session <n\|id>/)
+  assert.match(run.stdout, /messages 0/)
+  assert.match(run.stdout, /freecode \[/)
+})
+
 test("CLI reports a missing session", async (t) => {
   const { dir, env } = await setup(t)
   const run = await runCli({ args: ["--offline", "--no-color", "--session", "nope"], cwd: dir, env })

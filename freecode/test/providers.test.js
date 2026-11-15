@@ -214,6 +214,22 @@ test("ModelPool rotates API keys on auth failures", async () => {
   }
 })
 
+test("ModelPool summarizes failures across every model", async () => {
+  const pool = new ModelPool({
+    config: poolConfig("http://127.0.0.1:1/v1", { keyless: true }),
+    catalog: [entry("first-model", "m1"), entry("second-model", "m2")]
+  })
+  await assert.rejects(
+    pool.chat({ messages: [{ role: "user", content: "hi" }], timeoutMs: 2000 }),
+    (error) => {
+      assert.match(error.message, /all 2 free models failed/)
+      assert.match(error.message, /first-model:/)
+      assert.match(error.message, /\(\+1 more\)/)
+      return true
+    }
+  )
+})
+
 test("ModelPool reports a helpful error when nothing is configured", async () => {
   const pool = new ModelPool({ config: poolConfig("http://127.0.0.1:1/v1", { keyless: false }), catalog: [entry("none", "x")] })
   await assert.rejects(
