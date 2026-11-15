@@ -228,8 +228,36 @@ PY
       warn "opencode.json nahi mila — plugin copy only"
     fi
   else
-    warn "opencode $VER → retry plugin v2-only (skipped)"
-    say "wall par message dobara bhejna; v2 par auto-retry hoga"
+    PLUGINS="$HOME/.config/opencode/plugins"
+    mkdir -p "$PLUGINS"
+    # opencode 1.19.5 imports plugins/<dir>/index.ts but never calls it;
+    # a flat .ts file is the only shape that actually runs on v1.
+    rm -rf "$PLUGINS/opencode-unlimited-tokens"
+    rm -f "$PLUGINS/unlimited-tokens.ts"
+    cp "$SRC/plugin/opencode-unlimited-lane/index.ts" "$PLUGINS/opencode-unlimited-lane.ts"
+    chmod 600 "$PLUGINS/opencode-unlimited-lane.ts"
+    CFG="$HOME/.config/opencode/opencode.json"
+    if [ -f "$CFG" ]; then
+      python3 - "$CFG" <<'PYCFG'
+import json, shutil, sys, time
+cfg = sys.argv[1]
+try:
+    d = json.load(open(cfg))
+except Exception:
+    d = {}
+shutil.copy2(cfg, cfg + ".bak." + time.strftime("%Y%m%d-%H%M%S"))
+d.pop("plugins", None)
+comp = d.setdefault("compaction", {})
+comp["auto"] = True
+comp.setdefault("prune", True)
+json.dump(d, open(cfg, "w"), indent=2)
+PYCFG
+      ok "v1 lane plugin (all-model quota bypass + context guard)"
+      ok "config: compaction.auto on, v2-only plugins key removed"
+    else
+      warn "opencode.json nahi mila — plugin copy only"
+    fi
+    say "wall aane par plugin khud WARP rotate karke continue karta hai"
   fi
 else
   warn "opencode missing — plugin skipped"

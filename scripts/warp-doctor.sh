@@ -47,15 +47,15 @@ case ":$PATH:" in
     ;;
 esac
 
-if curl -s -m 2 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'; then
-  HEALTH=$(curl -s -m 3 "$PROXY/health")
+if curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'; then
+  HEALTH=$(curl -s --noproxy '*' -m 3 "$PROXY/health")
   ACTIVE=$(printf '%s' "$HEALTH" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("active","?"))' 2>/dev/null)
   ok "warp-minimal: healthy (active=$ACTIVE)"
 else
   bad "warp-minimal not healthy — bash $DEST/scripts/warp-start.sh"
 fi
 
-TRACE=$(curl -sS -m 15 -x "$PROXY" https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null)
+TRACE=$(curl -sS --noproxy "" -m 15 -x "$PROXY" https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null)
 IP=$(printf '%s\n' "$TRACE" | grep '^ip=' | cut -d= -f2)
 WARP=$(printf '%s\n' "$TRACE" | grep '^warp=' | cut -d= -f2)
 if [ "$WARP" = "on" ]; then
@@ -64,7 +64,7 @@ else
   bad "egress is not WARP — trace: ${TRACE:-no answer}"
 fi
 
-EXITS=$(curl -s -m 3 "$PROXY/exits" 2>/dev/null)
+EXITS=$(curl -s --noproxy '*' -m 3 "$PROXY/exits" 2>/dev/null)
 if [ -n "$EXITS" ]; then
   printf '%s' "$EXITS" | python3 -c '
 import json,sys

@@ -25,7 +25,9 @@ Yeh:
 2. `warp-minimal` + scripts `~/.local/share/opencode-unlimited-warp` mein copy karta hai.
 3. WARP tunnel start karke `warp=on` verify karta hai.
 4. `~/.local/bin/opencode` shim lagata hai + `~/.bashrc` mein PATH add karta hai.
-5. opencode v2 ho to retry plugin bhi install karta hai.
+5. opencode version ke hisaab se plugin install karta hai:
+   v2 → `opencode-warp-retry` (retry hook), v1 → `opencode-unlimited-lane.ts`
+   (all-model quota bypass + context guard).
 
 Agar `opencode` missing hai to installer recommendations dikha kar rukega
 (default). Components only install karne hain to `--no-opencode`.
@@ -33,7 +35,7 @@ Agar `opencode` missing hai to installer recommendations dikha kar rukega
 ## Use
 
 ```sh
-opencode                          # launcher menu (status + 1 run / 2 install)
+opencode                          # launcher UI v2 (arrow keys / numbers)
 oc                                # same menu, short command
 opencode run "..."                # direct lane one-shot (menu skip)
 opencode-unlimited-hop            # manual fresh WARP /64
@@ -42,21 +44,57 @@ opencode-unlimited-stop           # stop daemon + guard
 opencode-unlimited-start          # start again
 ```
 
-Menu (no args + interactive terminal):
+Menu (no args + interactive terminal, ↑↓ + Enter):
 
 ```
-1  Run opencode              (TUI)
-2  Install / repair opencode (pkg / recent Termux builds / lane repair)
+1  Run opencode                 TUI kholo
+2  Install / repair opencode    pkg · builds · freeflow · lane
 3  Start / restart WARP lane
 4  Rotate WARP /64
 5  Doctor
-6  Uninstall lane
+6  Logs                         opencode · lane · guard · daemon
+7  Check updates / upgrade      GitHub release → sha256 → replace → rollback
+8  About / credits              sources + versions
+9  Uninstall lane
 0  Exit
 ```
 
-Wall aane par: daemon khud pool rotate karta hai; message dobara bhej do.
-opencode v2 par retry plugin khud retry kar deta hai. Direct TUI chahiye to
+Status panel is live: lane state, `warp=on/off`, exits healthy/total, served
+count, latency, guard, egress IP, opencode + WARP versions.
+
+## Unlimited free models (v1 plugin)
+
+`opencode-unlimited-lane.ts` har free model par kaam karta hai (deepseek,
+flint, glm, minimax — koi bhi):
+
+1. **Quota wall** (`free usage limit`, `429`, `503`, `service unavailable`,
+   proxy tunnel 503) → plugin local proxy par `POST /recycle` karta hai,
+   fresh healthy WARP exit `/64` ka wait karta hai, phir session ko
+   `continue` se auto-resume karta hai. Retry unlimited hain, sirf 45s
+   cooldown per session (loop guard).
+2. **Context wall** → usage har step par track hota hai; `maxOutputTokens`
+   remaining budget par cap hota hai; 85% par transcript handoff + session
+   compact (`/session/{id}/summarize`). Context-length error aane par bhi
+   khud compact karke agla turn chalne deta hai.
+
+Tools: `token_status`, `warp_rotate`, `handoff`, `compact_now`.
+Commands: `/tokens`, `/compact-now`, `/handoff`, `/resume`.
+Log: `~/.config/opencode/memory/unlimited-tokens.log`.
+
+**v1 quirk:** opencode 1.19.5 `plugins/<dir>/index.ts` ko import karta hai
+lekin usko call nahi karta. Isliye plugin flat file hota hai —
+`~/.config/opencode/plugins/opencode-unlimited-lane.ts`.
+
+Wall ke baad kuch nahi karna: plugin khud rotate + continue karta hai.
+Manual chahiye to `opencode-unlimited-hop`. Direct TUI ke liye
 `OC_MENU_SKIP=1 opencode`.
+
+### Two networks, on purpose
+
+`HTTPS_PROXY` points at the WARP proxy so opencode's model traffic exits on a
+rotating WARP /64. `NO_PROXY` keeps GitHub / npm / apt / PyPI **direct**,
+because those hosts refuse or drop traffic coming from Cloudflare WARP exits
+(which breaks tooling inside a session).
 
 ## Files
 
@@ -71,6 +109,7 @@ opencode v2 par retry plugin khud retry kar deta hai. Direct TUI chahiye to
 | `scripts/warp-guard.sh` | log watcher → recycle on quota lines |
 | `scripts/warp-doctor.sh` | diagnostics |
 | `plugin/opencode-warp-retry/` | opencode v2 retry hook (adapted, MIT) |
+| `plugin/opencode-unlimited-lane/` | opencode v1 all-model quota bypass + context guard |
 | `docs/RECOVERY.md` | old session ka unfinished work + exact fixes |
 | `docs/GITHUB-SOURCES.md` | recent repos checked, adopted/rejected with dates |
 | `docs/OPENCODE-INSTALL.md` | agar opencode install nahi hai |
@@ -79,6 +118,16 @@ Upstream `scripts/zen-*.sh` aur `README.md` untouched hain. `install.sh` ab
 Termux par isi lane installer par redirect karta hai (Linux par upstream
 systemd installer hi chalta hai). `README-TERMUX.md` mein working solution ka
 update add kiya gaya hai.
+
+## Fixes in this revision (2026-11-15)
+
+- **Port race:** `warp-start.sh` exit-count (`healthy`=0) ko liveness samajh
+  raha tha, isliye dead-exit daemon ke upar dusra daemon spawn hota tha aur
+  `bind: address already in use` aata tha. Ab `alive()` (port responding) aur
+  `healthy()` (usable exit) alag hain, stale process pehle kill hota hai.
+- **Plugin load:** v1 dir-plugin call nahi hota — flat file install.
+- **Context wall:** `compaction.auto` on; `plugins` (v2-only) key hatai gayi;
+  token guard + auto-compact v1 API par likha gaya.
 
 ## Verified on this device
 
@@ -96,6 +145,7 @@ HTTPS_PROXY=http://127.0.0.1:8789 opencode run "Reply with exactly: LANE-OK"
 
 - WARP exit pool shared hai; rotation kabhi spent block de sakta hai — hop dobara.
 - Free tier per egress /64 metered hai (~100 req/day, ~00:00 UTC reset).
-- v1 par auto-resume nahi; v2 ke liye plugin included.
+- v1 par auto-resume plugin ke through hai (opencode >= 1.19.x); bahut purane
+  builds par `event` hook na ho to message dobara bhejna padega.
 - No kill-switch: lane explicit-proxy hai; daemon down = requests fail (direct
   leak nahi, kyunki proxy env force hota hai).

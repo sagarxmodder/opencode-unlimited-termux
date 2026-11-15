@@ -5,14 +5,14 @@ set -u
 PROXY="${OUC_WARP_PROXY:-http://127.0.0.1:8789}"
 
 egress() {
-  curl -sS -m 15 -x "$PROXY" https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null \
+  curl -sS --noproxy "" -m 15 -x "$PROXY" https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null \
     | grep '^ip=' | cut -d= -f2
 }
 
 BEFORE="$(egress)"
 echo "old egress: ${BEFORE:-?}"
 
-if ! curl -s -m 10 -X POST "$PROXY/recycle" >/dev/null 2>&1; then
+if ! curl -s --noproxy '*' -m 10 -X POST "$PROXY/recycle" >/dev/null 2>&1; then
   echo "[x] recycle failed — is warp-minimal running?" >&2
   exit 1
 fi

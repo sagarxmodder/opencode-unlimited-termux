@@ -58,4 +58,11 @@ export https_proxy="$PROXY"
 export http_proxy="$PROXY"
 export all_proxy="$PROXY"
 
+# Keep code/dev hosts DIRECT: the WARP exit is for opencode.ai's quota bucket.
+# GitHub API / npm / registries over WARP often get refused (502) which would
+# break tooling inside the session.
+NO_PROXY_LIST="localhost,127.0.0.1,::1,api.github.com,github.com,raw.githubusercontent.com,objects.githubusercontent.com,codeload.github.com,registry.npmjs.org,registry.npmjs.com,npmjs.org,pypi.org,files.pythonhosted.org,proxy.golang.org,sum.golang.org,deb.debian.org,packages.termux.dev,termux.dev,googleapis.com,gstatic.com"
+export NO_PROXY="$NO_PROXY_LIST"
+export no_proxy="$NO_PROXY_LIST"
+
 exec "$REAL" "$@"

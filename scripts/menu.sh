@@ -40,8 +40,8 @@ find_opencode() {
   return 1
 }
 
-health_json() { curl -s -m 2 "$PROXY/health" 2>/dev/null; }
-trace() { curl -sS -m 6 -x "$PROXY" https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null; }
+health_json() { curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null; }
+trace() { curl -sS --noproxy "" -m 6 -x "$PROXY" https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null; }
 lane_running() { pgrep -f "$DEST/bin/warp-minimal" >/dev/null 2>&1; }
 guard_running() { pgrep -f "$DEST/scripts/warp-guard.sh" >/dev/null 2>&1; }
 
@@ -56,7 +56,7 @@ refresh_status() {
   else
     ACTIVE=0; HEALTHY=0
   fi
-  EJ="$(curl -s -m 3 "$PROXY/exits" 2>/dev/null)"
+  EJ="$(curl -s --noproxy '*' -m 3 "$PROXY/exits" 2>/dev/null)"
   SERVED="$(printf '%s' "$EJ" | python3 -c 'import json,sys;print(sum(int(e.get("served",0)) for e in json.load(sys.stdin)))' 2>/dev/null)"
   T0="$(date +%s%3N 2>/dev/null || echo 0)"
   TR="$(trace)"

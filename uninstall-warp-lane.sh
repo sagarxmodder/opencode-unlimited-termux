@@ -43,4 +43,7 @@ PY
   echo "[ok] v2 retry plugin removed"
 fi
 
+rm -f "$HOME/.config/opencode/plugins/opencode-unlimited-lane.ts" 2>/dev/null || true
+rm -rf "$HOME/.config/opencode/plugins/opencode-unlimited-tokens" 2>/dev/null || true
+
 echo "[ok] gone. ~/.bashrc ka PATH line reh sakta hai (harmless)."

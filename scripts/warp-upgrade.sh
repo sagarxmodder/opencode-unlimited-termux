@@ -25,7 +25,7 @@ printf '\n   %sCHECK UPDATES%s  %s·  warp-minimal%s\n\n' "$CD" "$C0" "$CD" "$C0
 CURRENT="$("$BIN" -version 2>/dev/null | awk '{print $2}')"
 [ -n "$CURRENT" ] || CURRENT="unknown"
 
-LATEST="$(curl -fsSL -m 20 -H 'User-Agent: opencode-unlimited' "$API" 2>/dev/null \
+LATEST="$(curl -fsSL --noproxy '*' -m 20 -H 'User-Agent: opencode-unlimited' "$API" 2>/dev/null \
   | python3 -c 'import json,sys;print(json.load(sys.stdin).get("tag_name",""))' 2>/dev/null)"
 if [ -z "$LATEST" ]; then
   bad "GitHub release check fail (network/rate limit)"
@@ -58,12 +58,12 @@ URL="https://github.com/$REPO/releases/download/$LATEST/warp-minimal_${LATEST}_l
 SUMURL="https://github.com/$REPO/releases/download/$LATEST/checksums.txt"
 
 printf '        %s…%s downloading %s ' "$CD" "$C0" "$LATEST"
-if ! curl -fsSL -m 180 "$URL" -o "$TMP/wm.tar.gz"; then
+if ! curl -fsSL --noproxy '*' -m 180 "$URL" -o "$TMP/wm.tar.gz"; then
   printf '\n'; bad "download fail: $URL"; exit 1
 fi
 printf 'ok\n'
 
-if curl -fsSL -m 60 "$SUMURL" -o "$TMP/checksums.txt" 2>/dev/null; then
+if curl -fsSL --noproxy '*' -m 60 "$SUMURL" -o "$TMP/checksums.txt" 2>/dev/null; then
   EXPECT="$(grep 'linux_arm64.tar.gz' "$TMP/checksums.txt" | awk '{print $1}' | head -n1)"
   ACTUAL="$(sha256sum "$TMP/wm.tar.gz" | awk '{print $1}')"
   if [ -n "$EXPECT" ] && [ "$EXPECT" = "$ACTUAL" ]; then
@@ -98,7 +98,7 @@ if ! bash "$DEST/scripts/warp-start.sh" >/dev/null 2>&1; then
 fi
 printf 'ok\n'
 
-TRACE="$(curl -sS -m 15 -x "http://127.0.0.1:8789" https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null)"
+TRACE="$(curl -sS --noproxy "" -m 15 -x "http://127.0.0.1:8789" https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null)"
 if printf '%s\n' "$TRACE" | grep -q '^warp=on$'; then
   ok "upgraded to $LATEST · warp=on"
 else

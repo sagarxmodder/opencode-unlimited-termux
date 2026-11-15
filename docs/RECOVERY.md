@@ -60,6 +60,10 @@ Pieces:
   `SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem`. Without it, some shells start the
   daemon without the variable and Go fails WARP registration with
   `x509: certificate signed by unknown authority`.
+- **NO_PROXY** — the lane exports a `NO_PROXY` list (GitHub, npm, apt, PyPI)
+  so tooling inside a session does not go through the WARP exit. GitHub's API
+  answers `502 CONNECT tunnel failed` from Cloudflare WARP exits, which broke
+  API access; those hosts now stay direct while `opencode.ai` stays on WARP.
 - **opencode proxy env** — verified empirically: a local CONNECT logger saw
   `CONNECT models.opencode.ai:443` and `CONNECT opencode.ai:443` from
   opencode 1.19.5.

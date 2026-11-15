@@ -27,27 +27,40 @@ else
   warn "CA bundle missing: $CERT — run: pkg install ca-certificates"
 fi
 
+# healthy = server is up AND has at least one usable exit.
 healthy() {
-  curl -s -m 2 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'
+  curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'
+}
+
+# alive = something is answering on the port, even with zero exits. Without
+# this, a lane stuck at healthy=0 looks dead, start spawns a second copy, and
+# that copy dies with "bind: address already in use".
+alive() {
+  [ -n "$(curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null)" ]
 }
 
 if healthy && pgrep -f "$DEST/bin/warp-minimal" >/dev/null 2>&1; then
   ok "warp-minimal already running"
 else
-  if healthy; then
-    warn "another instance owns $PROXY — restarting with this lane's config"
+  if alive || pgrep -f "$DEST/bin/warp-minimal" >/dev/null 2>&1; then
+    if alive; then
+      warn "another instance owns $PROXY — restarting with this lane's config"
+    else
+      warn "stale warp-minimal process found — restarting"
+    fi
     pkill -f "$DEST/bin/warp-minimal" 2>/dev/null || true
     pkill -x warp-minimal 2>/dev/null || true
     pkill -f 'warp-minimal.*-config' 2>/dev/null || true
     k=0
-    while healthy && [ "$k" -lt 10 ]; do
+    while alive && [ "$k" -lt 10 ]; do
       sleep 1
       k=$((k + 1))
     done
-    if healthy; then
+    if alive; then
       bad "port 8789 still held after 10s — 'opencode-unlimited-stop' chalao"
       exit 1
     fi
+    rm -f "$RUN/warp-minimal.pid"
     sleep 1
   fi
 
@@ -95,14 +108,22 @@ else
     printf '\n        %s── last warp-minimal.log ──%s\n' "$CD" "$C0"
     tail -n 10 "$LOGS/warp-minimal.log" 2>/dev/null | sed 's/^/          /'
     printf '\n'
+    if alive; then
+      bad "server is up but 0 WARP exits (registration/API problem, not the port)"
+    else
+      bad "nothing listening on 8789 either — daemon crashed at boot"
+    fi
     bad "hints: pkg install proot ca-certificates · internet/UDP 443 check karo · phir retry"
+    pkill -f "$DEST/bin/warp-minimal" 2>/dev/null || true
+    pkill -x warp-minimal 2>/dev/null || true
+    rm -f "$RUN/warp-minimal.pid"
     exit 1
   fi
 
   # pool size 2: give the second slot a few seconds, don't block forever
   j=0; EXITS=0
   while [ "$j" -lt 8 ]; do
-    EXITS=$(curl -s -m 3 "$PROXY/health" 2>/dev/null | python3 -c \
+    EXITS=$(curl -s --noproxy '*' -m 3 "$PROXY/health" 2>/dev/null | python3 -c \
       'import json,sys;print(json.load(sys.stdin).get("healthy",0))' 2>/dev/null)
     [ "${EXITS:-0}" -ge 2 ] && break
     sleep 1

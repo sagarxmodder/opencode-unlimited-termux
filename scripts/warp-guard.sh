@@ -48,7 +48,7 @@ while true; do
       if [ $((NOW - LAST)) -ge "$COOLDOWN" ]; then
         echo "$NOW" > "$LAST_FILE"
         log "wall detected — recycling WARP exits"
-        if curl -s -m 10 -X POST "$PROXY/recycle" >/dev/null 2>&1; then
+        if curl -s --noproxy '*' -m 10 -X POST "$PROXY/recycle" >/dev/null 2>&1; then
           log "recycle requested"
         else
           log "recycle failed (daemon down?)"
