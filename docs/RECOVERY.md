@@ -86,6 +86,34 @@ LANE-OK
 Two healthy WARP exits were registered; the proxy reported
 `"healthy":2, "active":2`.
 
+## Later same day — freecode UX, lane menu, hardening
+
+- **freecode REPL UI:** banner me model + session + message count; prompt
+  `freecode [model · s:xxxx] ›`; `/model` numbered ready-model picker;
+  `/sessions` list + `/session <n|id>` switch; `/clear`, `/continue`, richer
+  `/status` (provider, cooldowns, session file); Tab completion for commands,
+  model ids and session ids.
+- **Piped REPL input:** `rl.question` buffered lines drop kar raha tha; ab
+  persistent line queue hai, isliye scripts/tests ke multi-line input par
+  har command chalta hai.
+- **HTTPS proxy:** `ProxyAgent` ko `https.Agent` extend karna padta hai;
+  `http.Agent` par `Protocol "https:" not supported. Expected "http:"` aata
+  tha. Local CONNECT regression test added.
+- **Menu opencode detection:** `OC` sirf background subshell me set ho raha
+  tha, isliye menu opencode ko missing samajh kar auto-install loop karta tha.
+  Ab `refresh_status` ke start me set hota hai.
+- **Ship freecode:** lane installer `$DEST/freecode` copy karta hai aur node
+  milne par wrapper install karta hai; uninstaller sirf apna wrapper hatata hai.
+- **Hermetic CLI tests:** test config me LLM7/LM Studio/Pollinations keyless
+  off, aur live proxy/key env vars cleared — suite local fake server par chalti
+  hai (40 tests).
+- **Fail summary:** ModelPool ab `all N free models failed — <first>: <reason>
+  (+N more)` deta hai instead of last model ka ECONNREFUSED.
+- **Install/uninstall UI:** warp lane installer + uninstaller ab menu jaisi
+  card UI, step progress aur summary footer use karte hain.
+- **Device cleanup:** toota `hope2333-mirrorlist` dpkg record
+  `--force-remove-reinstreq` se hataya; custom apt sources intact hain.
+
 ## Remaining limits
 
 - Cloudflare's WARP pool is shared. A rotation can occasionally hand back a

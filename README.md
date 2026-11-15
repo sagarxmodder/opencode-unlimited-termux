@@ -1,4 +1,91 @@
-# Opencode Unlimited Usage
+# Opencode Unlimited — Termux + Linux
+
+Bypass opencode's free-model daily usage wall by rotating Cloudflare WARP
+identities. Works on Android/Termux without root, and on Linux/WSL2 with
+systemd. The repo also ships **freecode**, a keyless free-model coding agent.
+
+## Termux / Android (no root) — main lane
+
+Working on Android 11+, aarch64, non-root. Userspace Cloudflare WARP (MASQUE,
+QUIC/UDP 443) runs behind a local HTTP proxy — no `unshare`, `warp-cli`,
+`iptables`, `sudo`, or systemd.
+
+```
+opencode
+  └─ HTTPS_PROXY=http://127.0.0.1:8789
+       └─ warp-minimal (WARP MASQUE, userspace)
+            └─ fresh WARP IPv6 /64 on rotation
+```
+
+```sh
+pkg install nodejs          # freecode ke liye (optional but recommended)
+bash install-warp-lane.sh   # local clone
+# or: curl -fsSL https://raw.githubusercontent.com/sagarxmodder/opencode-unlimited-termux/main/get.sh | bash
+opencode                    # main menu
+```
+
+The installer copies the runtime to `~/.local/share/opencode-unlimited-warp`,
+starts WARP, installs the `opencode` menu shim, and ships `freecode` alongside.
+
+### Main menu
+
+```
+1  Run opencode        unlimited lane TUI
+2  Run freecode        keyless free-model agent (LLM7 + Pollinations)
+3  Unlimited status    models · retries · context
+4  Restart WARP lane   daemon + guard
+5  Rotate WARP /64     fresh identity
+6  Doctor              health + egress
+7  Logs                opencode · lane · plugin
+8  About / updates     credits + GitHub update check
+9  Uninstall lane      runtime only
+0  Exit
+```
+
+Direct commands: `oc` (menu shortcut), `opencode run "..."` (one-shot lane),
+`OC_MENU_SKIP=1 opencode` (stock TUI without the menu),
+`opencode-unlimited-hop`, `opencode-unlimited-doctor`,
+`opencode-unlimited-start`, `opencode-unlimited-stop`.
+
+## freecode — keyless free-model coding agent
+
+Terminal coding agent with automatic failover across free OpenAI-compatible
+models. Zero npm dependencies, Node built-ins only.
+
+```sh
+freecode                     # interactive REPL
+freecode "fix the failing test"
+freecode doctor              # provider/key status
+freecode models              # catalog
+```
+
+- **No key needed:** LLM7 (`gpt-oss:20b`, `minimax-m2.7`,
+  `DeepSeek-V4-Flash`, `glm-5.3-flash`, `codestral`) and Pollinations
+  (`openai-fast`) are keyless.
+- Optional keys (higher limits): OpenRouter, Groq, Google AI Studio, Cerebras,
+  Mistral, GitHub Models, SambaNova, NVIDIA NIM.
+- The lane menu runs freecode through the local WARP proxy when the lane is
+  healthy, so keyless quotas rotate with the exit; GitHub/npm stay direct.
+- Keyless tiers are still metered: LLM7 has an anonymous daily token quota and
+  Pollinations allows roughly one reply per 45s per IP.
+- Tests: `cd freecode && npm test` (40 tests, local-only).
+
+Full details: [`freecode/README.md`](freecode/README.md).
+
+## Docs
+
+- [`README-WARP-LANE.md`](README-WARP-LANE.md) — lane install, menu, plugin, limits
+- [`README-TERMUX.md`](README-TERMUX.md) — Termux history + current quick start
+- [`docs/RECOVERY.md`](docs/RECOVERY.md) — fixes, failures, exact commands
+- [`docs/GITHUB-SOURCES.md`](docs/GITHUB-SOURCES.md) — sources checked/adopted
+- [`docs/OPENCODE-INSTALL.md`](docs/OPENCODE-INSTALL.md) — opencode install help
+
+---
+
+# Linux / WSL2 (systemd) edition
+
+The sections below are the original Linux/WSL2 story. They still install with
+`install.sh` on a systemd distro. For Termux use the lane above.
 
 Bypass opencode's free model daily usage wall on Linux. One command install, self healing, home IP never leaks out.
 

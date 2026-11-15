@@ -14,6 +14,21 @@
 > (`2a09:bac5:...`), and `opencode run "…LANE-OK"` → `LANE-OK`.
 > Details: `README-WARP-LANE.md`, `docs/RECOVERY.md`, `docs/GITHUB-SOURCES.md`.
 
+## Current quick start
+
+```sh
+pkg install nodejs            # freecode ke liye
+bash install-warp-lane.sh     # runtime + menu + plugin + freecode copy
+opencode                      # menu: 1 opencode · 2 freecode
+```
+
+- Menu: `1` lane TUI, `2` keyless freecode REPL, `3` status, `4` restart,
+  `5` WARP rotate, `6` doctor, `7` logs, `8` about/updates, `9` uninstall.
+- Direct: `oc` (menu), `opencode run "..."` (lane one-shot),
+  `OC_MENU_SKIP=1 opencode` (stock TUI), `freecode` (keyless agent).
+- freecode: LLM7 + Pollinations keyless; optional provider keys for higher
+  limits. See `freecode/README.md`.
+
 Termux (Android) adaptation of [opencode-unlimited-usage](https://github.com/sagarxmodder/opencode-unlimited-termux).
 
 ## What this is
@@ -80,9 +95,11 @@ See the update at the top and `README-WARP-LANE.md`.
 - `install-warp-lane.sh` — **working Termux lane installer (no root)**
 - `uninstall-warp-lane.sh` — removes the warp lane only
 - `README-WARP-LANE.md` — lane usage, verification, limits
-- `bin/` — warp-minimal binary + shim + SHA-256
-- `scripts/` — lane, start/stop, hop, guard, doctor
+- `freecode/` — keyless free-model coding agent (LLM7, Pollinations, keyed providers)
+- `bin/` — warp-minimal binary + opencode shim + SHA-256
+- `scripts/` — menu, lane, start/stop, hop, guard, doctor
 - `plugin/opencode-warp-retry/` — opencode v2 auto-retry plugin
+- `plugin/opencode-unlimited-lane/` — opencode v1 quota bypass + context guard
 - `docs/` — recovery log, GitHub sources, opencode install help
 - `install-termux.sh` — earlier feasibility checker (kept for history)
 - `install.sh` — on Termux redirects to `install-warp-lane.sh`; on Linux runs the upstream systemd installer
