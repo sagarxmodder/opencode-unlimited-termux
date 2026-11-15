@@ -3,6 +3,7 @@
 set -u
 
 DEST="${OUC_WARP_DEST:-$HOME/.local/share/opencode-unlimited-warp}"
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 bash "$DEST/scripts/warp-stop.sh" >/dev/null 2>&1 || true
 
@@ -17,31 +18,29 @@ if [ -f "$HOME/.local/bin/opencode" ] && grep -q "opencode-unlimited-warp" "$HOM
   echo "[ok] shim removed (stock opencode still at \$(command -v opencode) via /usr/bin)"
 fi
 
-rm -rf "$DEST"
-echo "[ok] runtime removed: $DEST"
+CFG_DIR="$HOME/.config/opencode"
+CFG_TOOL="$SRC/scripts/config-util.py"
+[ -f "$CFG_TOOL" ] || CFG_TOOL="$DEST/scripts/config-util.py"
+find_cfg() {
+  for f in "$CFG_DIR/opencode.json" "$CFG_DIR/opencode.jsonc"; do
+    [ -f "$f" ] && printf '%s\n' "$f" && return 0
+  done
+  return 1
+}
 
 PLUGIN_DIR="$HOME/.config/opencode/plugins/opencode-warp-retry"
 if [ -d "$PLUGIN_DIR" ]; then
   rm -rf "$PLUGIN_DIR"
-  CFG="$HOME/.config/opencode/opencode.json"
-  if [ -f "$CFG" ]; then
-    python3 - "$CFG" "$PLUGIN_DIR" <<'PY'
-import json, shutil, sys, time
-cfg, path = sys.argv[1], sys.argv[2]
-try:
-    d = json.load(open(cfg))
-except Exception:
-    raise SystemExit(0)
-before = d.get("plugins", [])
-after = [p for p in before if not (isinstance(p, dict) and p.get("package") == path)]
-if len(after) != len(before):
-    d["plugins"] = after
-    shutil.copy2(cfg, cfg + ".bak." + time.strftime("%Y%m%d-%H%M%S"))
-    json.dump(d, open(cfg, "w"), indent=2)
-PY
+  CFG="$(find_cfg || true)"
+  if [ -n "$CFG" ] && [ -f "$CFG_TOOL" ]; then
+    OUT="$(python3 "$CFG_TOOL" v2-remove "$CFG" "$PLUGIN_DIR" 2>&1 || true)"
+    echo "[ok] v2 plugin config: $OUT ($(basename "$CFG"))"
   fi
   echo "[ok] v2 retry plugin removed"
 fi
+
+rm -rf "$DEST"
+echo "[ok] runtime removed: $DEST"
 
 rm -f "$HOME/.config/opencode/plugins/opencode-unlimited-lane.ts" 2>/dev/null || true
 rm -rf "$HOME/.config/opencode/plugins/opencode-unlimited-tokens" 2>/dev/null || true

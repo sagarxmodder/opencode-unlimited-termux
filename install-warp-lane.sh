@@ -126,8 +126,10 @@ mkdir -p "$DEST"/{bin,scripts,etc,logs,run,guard,plugin}
 cp "$SRC/bin/warp-minimal" "$DEST/bin/warp-minimal"
 cp "$SRC/bin/opencode-shim" "$DEST/bin/opencode-shim"
 cp "$SRC/scripts/"*.sh "$DEST/scripts/"
+[ -f "$SRC/scripts/config-util.py" ] && cp "$SRC/scripts/config-util.py" "$DEST/scripts/"
 cp -r "$SRC/plugin/opencode-warp-retry" "$DEST/plugin/"
 chmod 700 "$DEST/bin/warp-minimal" "$DEST/bin/opencode-shim" "$DEST/scripts/"*.sh
+chmod 700 "$DEST/scripts/config-util.py" 2>/dev/null || true
 ok "runtime → $DEST"
 
 python3 - "$DEST" <<'PY'
@@ -201,6 +203,15 @@ done
 
 # ---------------------------------------------------------------- 6. plugin
 section "opencode plugin"
+CFG_DIR="$HOME/.config/opencode"
+find_cfg() {
+  for f in "$CFG_DIR/opencode.json" "$CFG_DIR/opencode.jsonc"; do
+    [ -f "$f" ] && printf '%s\n' "$f" && return 0
+  done
+  return 1
+}
+CFG_TOOL="$SRC/scripts/config-util.py"
+[ -f "$CFG_TOOL" ] || CFG_TOOL="$DEST/scripts/config-util.py"
 if [ -n "$REAL" ]; then
   VER=$("$REAL" --version 2>/dev/null | head -n1)
   MAJ=$(printf '%s' "$VER" | grep -oE '[0-9]+' | head -n1)
@@ -208,24 +219,16 @@ if [ -n "$REAL" ]; then
     PLUGIN_DIR="$HOME/.config/opencode/plugins/opencode-warp-retry"
     mkdir -p "$PLUGIN_DIR"
     cp -r "$SRC/plugin/opencode-warp-retry/." "$PLUGIN_DIR/"
-    CFG="$HOME/.config/opencode/opencode.json"
-    if [ -f "$CFG" ]; then
-      python3 - "$CFG" "$PLUGIN_DIR" <<'PY'
-import json, shutil, sys, time
-cfg, path = sys.argv[1], sys.argv[2]
-try:
-    d = json.load(open(cfg))
-except Exception:
-    raise SystemExit(0)
-plugins = d.setdefault("plugins", [])
-if not any(isinstance(p, dict) and p.get("package") == path for p in plugins):
-    plugins.append({"package": path, "options": {"proxyUrl": "http://127.0.0.1:8789"}})
-    shutil.copy2(cfg, cfg + ".bak." + time.strftime("%Y%m%d-%H%M%S"))
-    json.dump(d, open(cfg, "w"), indent=2)
-PY
-      ok "v2 retry plugin + config updated"
+    CFG="$(find_cfg || true)"
+    if [ -n "$CFG" ]; then
+      OUT="$(python3 "$CFG_TOOL" v2-add "$CFG" "$PLUGIN_DIR" "$PROXY" 2>&1 || true)"
+      case "$OUT" in
+        changed*)  ok "v2 retry plugin + config updated ($(basename "$CFG"))" ;;
+        unchanged) ok "v2 retry plugin + config already set ($(basename "$CFG"))" ;;
+        *)         warn "config update skipped: $OUT" ;;
+      esac
     else
-      warn "opencode.json nahi mila — plugin copy only"
+      warn "opencode.json/.jsonc nahi mila — plugin copy only"
     fi
   else
     PLUGINS="$HOME/.config/opencode/plugins"
@@ -236,26 +239,17 @@ PY
     rm -f "$PLUGINS/unlimited-tokens.ts"
     cp "$SRC/plugin/opencode-unlimited-lane/index.ts" "$PLUGINS/opencode-unlimited-lane.ts"
     chmod 600 "$PLUGINS/opencode-unlimited-lane.ts"
-    CFG="$HOME/.config/opencode/opencode.json"
-    if [ -f "$CFG" ]; then
-      python3 - "$CFG" <<'PYCFG'
-import json, shutil, sys, time
-cfg = sys.argv[1]
-try:
-    d = json.load(open(cfg))
-except Exception:
-    d = {}
-shutil.copy2(cfg, cfg + ".bak." + time.strftime("%Y%m%d-%H%M%S"))
-d.pop("plugins", None)
-comp = d.setdefault("compaction", {})
-comp["auto"] = True
-comp.setdefault("prune", True)
-json.dump(d, open(cfg, "w"), indent=2)
-PYCFG
+    CFG="$(find_cfg || true)"
+    if [ -n "$CFG" ]; then
+      OUT="$(python3 "$CFG_TOOL" v1-compaction "$CFG" 2>&1 || true)"
+      case "$OUT" in
+        changed*)  ok "config updated ($(basename "$CFG")): compaction.auto on, v2-only plugins key removed" ;;
+        unchanged) ok "config already set ($(basename "$CFG"))" ;;
+        *)         warn "config update skipped: $OUT" ;;
+      esac
       ok "v1 lane plugin (all-model quota bypass + context guard)"
-      ok "config: compaction.auto on, v2-only plugins key removed"
     else
-      warn "opencode.json nahi mila — plugin copy only"
+      warn "opencode.json/.jsonc nahi mila — plugin copy only"
     fi
     say "wall aane par plugin khud WARP rotate karke continue karta hai"
   fi

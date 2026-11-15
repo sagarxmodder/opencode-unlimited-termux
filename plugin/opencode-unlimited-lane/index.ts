@@ -526,6 +526,23 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
       }
     },
 
+    // Compaction never deletes a session or its stored messages: it only
+    // replaces what the model sees with a summary. These two hooks keep the
+    // task state intact and resume automatically after a summary.
+    async "experimental.session.compacting"(_input: any, output: any) {
+      try {
+        output.context.push(
+          "Preserve every user decision, file path, command, error, and next step. Never drop task state.",
+        )
+      } catch {
+        // older builds ignore this hook
+      }
+    },
+
+    async "experimental.compaction.autocontinue"(_input: any, output: any) {
+      output.enabled = true
+    },
+
     tool: {
       token_status: tool({
         description: "Show model, context usage, compaction state, and WARP retry count for this session.",
