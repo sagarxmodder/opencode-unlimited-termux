@@ -43,7 +43,7 @@ Agar `opencode` missing hai to installer recommendations dikha kar rukega
 ## Use
 
 ```sh
-opencode                          # launcher UI v2 (arrow keys / numbers)
+opencode                          # launcher UI v3 (arrow keys / numbers)
 oc                                # same menu, short command
 opencode run "..."                # direct lane one-shot (menu skip)
 opencode-unlimited-hop            # manual fresh WARP /64
@@ -55,15 +55,15 @@ opencode-unlimited-start          # start again
 Menu (no args + interactive terminal, ↑↓ + Enter):
 
 ```
-1  Run opencode                 TUI kholo
-2  Install / repair opencode    pkg · builds · freeflow · lane
-3  Start / restart WARP lane
-4  Rotate WARP /64
-5  Doctor
-6  Logs                         opencode · lane · guard · daemon
-7  Check updates / upgrade      GitHub release → sha256 → replace → rollback
-8  About / credits              sources + versions
-9  Uninstall lane
+1  Run opencode                 unlimited lane kholo
+2  Run freecode                 keyless free-model agent (LLM7 + Pollinations)
+3  Unlimited status             models · retries · context
+4  Restart WARP lane            daemon + guard
+5  Rotate WARP /64              naya identity
+6  Doctor                       health + egress
+7  Logs                         opencode · lane · guard · daemon
+8  About / updates              credits + GitHub update check
+9  Uninstall lane               runtime only
 0  Exit
 ```
 

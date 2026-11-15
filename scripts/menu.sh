@@ -5,7 +5,8 @@ set -u
 DEST="${OUC_WARP_DEST:-$HOME/.local/share/opencode-unlimited-warp}"
 PROXY="${OUC_WARP_PROXY:-http://127.0.0.1:8789}"
 PKG_DIR="${OUC_PKG_DIR:-/storage/emulated/0/opencode-unlimited-termux}"
-MENU_VER="3.0"
+LANE_NO_PROXY="localhost,127.0.0.1,::1,github.com,api.github.com,raw.githubusercontent.com,registry.npmjs.org,registry.npmjs.com,pypi.org,files.pythonhosted.org"
+MENU_VER="3.1"
 PLUGIN_LOG="$HOME/.config/opencode/memory/unlimited-tokens.log"
 
 if [ -t 1 ]; then
@@ -22,13 +23,13 @@ trap 'stty sane 2>/dev/null; echo; exit 130' INT TERM
 
 ITEMS=(
   "Run opencode|unlimited lane kholo"
+  "Run freecode|keyless free-model agent"
   "Unlimited status|models · retries · context"
   "Restart WARP lane|daemon + guard"
   "Rotate WARP /64|naya identity"
   "Doctor|health + egress"
   "Logs|opencode · lane · plugin"
-  "Check updates|GitHub main"
-  "About / credits|sources + versions"
+  "About / updates|credits · GitHub main"
   "Uninstall lane|runtime only"
   "Exit|"
 )
@@ -40,6 +41,38 @@ find_opencode() {
     [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
   done
   return 1
+}
+
+run_freecode() {
+  local exe=""
+  if command -v freecode >/dev/null 2>&1; then
+    exe="$(command -v freecode)"
+  elif [ -f "$PKG_DIR/freecode/install.sh" ] && command -v node >/dev/null 2>&1; then
+    bash "$PKG_DIR/freecode/install.sh" >/dev/null 2>&1 || true
+    hash -r
+    command -v freecode >/dev/null 2>&1 && exe="$(command -v freecode)"
+  fi
+  if [ -z "$exe" ] && command -v node >/dev/null 2>&1 && [ -f "$PKG_DIR/freecode/bin/freecode" ]; then
+    exe="node:$PKG_DIR/freecode/bin/freecode"
+  fi
+  if [ -z "$exe" ]; then
+    printf '  %s✗ freecode missing — pkg install nodejs, phir: bash freecode/install.sh%s\n' "$CR" "$C0"
+    pause_key
+    return 0
+  fi
+  local -a cmd
+  case "$exe" in
+    node:*) cmd=(node "${exe#node:}") ;;
+    *) cmd=("$exe") ;;
+  esac
+  local -a envp=()
+  if health_json 2>/dev/null | grep -q '"healthy":[1-9]'; then
+    envp=(HTTPS_PROXY="$PROXY" HTTP_PROXY="$PROXY" ALL_PROXY="$PROXY"
+          https_proxy="$PROXY" http_proxy="$PROXY" all_proxy="$PROXY"
+          NO_PROXY="$LANE_NO_PROXY" no_proxy="$LANE_NO_PROXY")
+  fi
+  env "${envp[@]}" "${cmd[@]}" || true
+  stty sane 2>/dev/null || true
 }
 
 health_json() { curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null; }
@@ -314,7 +347,7 @@ logs_menu() {
 
 about_screen() {
   [ "$TTY" = 1 ] && clear
-  local guard_txt="stopped"
+  local c guard_txt="stopped"
   [ "${GUARD:-0}" = 1 ] && guard_txt="running"
   printf '\n  %s╭────────────────────────────────────────────────────────────╮%s\n' "$CG" "$C0"
   printf '    %sABOUT%s  %s·  OpenCode Unlimited%s  %s·  WARP lane%s\n' "$CB" "$C0" "$CG" "$C0" "$CGY" "$C0"
@@ -336,7 +369,12 @@ about_screen() {
   printf '     2026-11-14  lipey1/opencode-warp-retry  v2 retry hook (adapted)\n'
   printf '     2026-11-11  Suydev/opencode-unlimited-termux  lane layout reference\n'
   printf '\n   %sDocs%s  README-WARP-LANE.md · docs/RECOVERY.md\n' "$CB" "$C0"
-  pause_key
+  printf '\n    %s1%s Check updates (GitHub main)   %s0%s Back\n' "$CB" "$C0" "$CB" "$C0"
+  printf '\n  Choose [0-1]: '
+  IFS= read -r c || return 0
+  case "$c" in
+    1) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-upgrade.sh"; pause_key ;;
+  esac
 }
 
 uninstall_confirm() {
@@ -369,12 +407,12 @@ run_action() {
          stty sane 2>/dev/null || true
        fi
        refresh_status ;;
-    1) unlimited_screen; refresh_status ;;
-    2) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-start.sh"; pause_key; refresh_status ;;
-    3) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-hop.sh"; pause_key; refresh_status ;;
-    4) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-doctor.sh"; pause_key; refresh_status ;;
-    5) logs_menu; refresh_status ;;
-    6) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-upgrade.sh"; pause_key; refresh_status ;;
+    1) [ "$TTY" = 1 ] && clear; run_freecode; refresh_status ;;
+    2) unlimited_screen; refresh_status ;;
+    3) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-start.sh"; pause_key; refresh_status ;;
+    4) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-hop.sh"; pause_key; refresh_status ;;
+    5) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-doctor.sh"; pause_key; refresh_status ;;
+    6) logs_menu; refresh_status ;;
     7) about_screen ;;
     8) uninstall_confirm ;;
     9) [ "$TTY" = 1 ] && clear; exit 0 ;;

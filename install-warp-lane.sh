@@ -276,7 +276,7 @@ printf '\n'
 printf '  %s╭──────────────────────────────────────────────╮%s\n' "$CG" "$C0"
 printf '    %sREADY%s  %s·  warp lane installed%s\n' "$CB" "$C0" "$CG" "$C0"
 printf '  %s╰──────────────────────────────────────────────╯%s\n' "$CG" "$C0"
-printf '    %s%-26s%s %s\n' "$CB" "opencode" "$C0" "menu (1 run · 2 install)"
+printf '    %s%-26s%s %s\n' "$CB" "opencode" "$C0" "menu (1 opencode · 2 freecode)"
 printf '    %s%-26s%s %s\n' "$CB" "oc" "$C0" "menu shortcut"
 printf '    %s%-26s%s %s\n' "$CB" "opencode run \"...\"" "$C0" "direct lane"
 printf '    %s%-26s%s %s\n' "$CB" "opencode-unlimited-hop" "$C0" "fresh WARP /64"
