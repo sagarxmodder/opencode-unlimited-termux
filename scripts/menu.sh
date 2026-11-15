@@ -305,18 +305,25 @@ logs_menu() {
 
 about_screen() {
   [ "$TTY" = 1 ] && clear
+  local guard_txt="stopped"
+  [ "${GUARD:-0}" = 1 ] && guard_txt="running"
   printf '\n  %s╭────────────────────────────────────────────────────────────╮%s\n' "$CG" "$C0"
-  printf '    %sABOUT%s  %s·  opencode-unlimited warp lane%s\n' "$CB" "$C0" "$CG" "$C0"
+  printf '    %sABOUT%s  %s·  OpenCode Unlimited%s  %s·  WARP lane%s\n' "$CB" "$C0" "$CG" "$C0" "$CGY" "$C0"
   printf '  %s╰────────────────────────────────────────────────────────────╯%s\n' "$CG" "$C0"
+  printf '\n   %sFree-model lane for opencode on Android / Termux.%s\n' "$CD" "$C0"
+  printf '   No root, no TUN. Egress through Cloudflare WARP;\n'
+  printf '   fresh /64 on quota walls + automatic model failover.\n'
   printf '\n'
-  printf '   %sUI%s        %s\n' "$CGY" "$C0" "$MENU_VER"
-  printf '   %sWARP%s      %s  (Deury08/warp-minimal, MIT)\n' "$CGY" "$C0" "${WARP_VER:-?}"
-  printf '   %sopencode%s  %s  (%s)\n' "$CGY" "$C0" "$OCV" "${OC:-—}"
-  printf '   %sCredits%s   ItzSagarOp\n' "$CGY" "$C0"
-  printf '\n   %sSources (recent-first)%s\n' "$CB" "$C0"
-  printf '     2026-11-15  Ethos6/freeflow            optional fallback (58 providers)\n'
-  printf '     2026-11-14  Deury08/warp-minimal       core egress (v0.4.0)\n'
-  printf '     2026-11-14  lipey1/opencode-warp-retry v2 retry hook (adapted)\n'
+  printf '   %sBUILD%s     UI %s  ·  WARP %s  ·  guard %s\n' "$CGY" "$C0" "$MENU_VER" "${WARP_VER:-?}" "$guard_txt"
+  printf '   %sRUNTIME%s   opencode %s\n' "$CGY" "$C0" "$OCV"
+  printf '   %sPROXY%s     %s\n' "$CGY" "$C0" "$PROXY"
+  printf '   %sLICENSE%s   MIT\n' "$CGY" "$C0"
+  printf '   %sREPO%s      %s\n' "$CGY" "$C0" 'github.com/sagarxmodder/opencode-unlimited-termux'
+  printf '   %sCREDIT%s    ItzSagarOp\n' "$CGY" "$C0"
+  printf '\n   %sSOURCES (recent first)%s\n' "$CB" "$C0"
+  printf '     2026-11-15  Ethos6/freeflow             optional fallback (58 providers)\n'
+  printf '     2026-11-14  Deury08/warp-minimal        core egress (v0.4.0)\n'
+  printf '     2026-11-14  lipey1/opencode-warp-retry  v2 retry hook (adapted)\n'
   printf '     2026-11-11  Suydev/opencode-unlimited-termux  lane layout reference\n'
   printf '\n   %sDocs%s  README-WARP-LANE.md · docs/RECOVERY.md\n' "$CB" "$C0"
   pause_key
