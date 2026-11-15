@@ -82,7 +82,7 @@ export const PROVIDERS = {
 
 const proxyAgents = new Map()
 
-class ProxyAgent extends http.Agent {
+class ProxyAgent extends https.Agent {
   constructor(proxyUrl) {
     super({ keepAlive: false })
     const url = new URL(proxyUrl)

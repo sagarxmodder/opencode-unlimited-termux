@@ -46,6 +46,7 @@ async function setup(t) {
   fs.writeFileSync(path.join(dir, ".freecode.json"), JSON.stringify({
     providers: {
       ollama: { baseUrl: `http://127.0.0.1:${port}/v1`, keyless: true },
+      llm7: { keyless: false },
       lmstudio: { keyless: false },
       pollinations: { keyless: false }
     }
@@ -59,7 +60,8 @@ async function setup(t) {
   for (const key of [
     "OPENROUTER_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY", "CEREBRAS_API_KEY",
     "MISTRAL_API_KEY", "GITHUB_TOKEN", "SAMBANOVA_API_KEY", "NVIDIA_API_KEY",
-    "POLLINATIONS_API_KEY", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"
+    "POLLINATIONS_API_KEY", "LLM7_API_KEY", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY",
+    "https_proxy", "http_proxy", "all_proxy"
   ]) delete env[key]
   return { dir, env }
 }

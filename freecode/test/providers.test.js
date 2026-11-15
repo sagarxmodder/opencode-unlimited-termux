@@ -247,6 +247,35 @@ test("classifyError distinguishes contexts, models tools and auth", () => {
   assert.equal(classifyError(new Error("socket hang up")), "retry")
 })
 
+test("httpRequest tunnels HTTPS through an HTTP CONNECT proxy", async (t) => {
+  const keys = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"]
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]))
+  for (const key of keys) delete process.env[key]
+  t.after(() => {
+    for (const key of keys) {
+      if (saved[key] === undefined) delete process.env[key]
+      else process.env[key] = saved[key]
+    }
+  })
+
+  let connectLine = ""
+  const server = http.createServer()
+  server.on("connect", (request, socket) => {
+    connectLine = `${request.method} ${request.url}`
+    socket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n")
+  })
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  t.after(() => new Promise((resolve) => server.close(resolve)))
+  const { port } = server.address()
+
+  process.env.HTTPS_PROXY = `http://127.0.0.1:${port}`
+  await assert.rejects(
+    httpRequest({ url: "https://api.example.com/v1/models" }),
+    (error) => /proxy CONNECT failed/.test(error.message)
+  )
+  assert.equal(connectLine, "CONNECT api.example.com:443")
+})
+
 test("proxyFor honors env, localhost bypass and NO_PROXY", (t) => {
   const keys = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"]
   const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]))
