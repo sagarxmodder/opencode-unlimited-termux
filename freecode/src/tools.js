@@ -256,7 +256,9 @@ async function toolEdit(args, context) {
   if (count > 1 && !args.replaceAll) {
     throw new Error(`oldString matches ${count} times in ${file}; add more context or set replaceAll`)
   }
-  const next = args.replaceAll ? text.split(oldString).join(newString) : text.replace(oldString, newString)
+  const next = args.replaceAll
+    ? text.split(oldString).join(newString)
+    : text.replace(oldString, () => newString)
   await fs.promises.writeFile(file, next)
   return `Replaced ${args.replaceAll ? count : 1} occurrence(s) in ${file}`
 }
@@ -384,7 +386,12 @@ async function toolWebfetch(args) {
       const location = response.headers.location
       if ([301, 302, 303, 307, 308].includes(status) && location) {
         response.stream.destroy()
-        url = new URL(location, url).toString()
+        if (redirect === 5) throw new Error("too many redirects")
+        const next = new URL(location, url)
+        if (next.protocol !== "http:" && next.protocol !== "https:") {
+          throw new Error(`redirected to unsupported protocol: ${next.protocol}`)
+        }
+        url = next.toString()
         continue
       }
       break

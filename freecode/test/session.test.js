@@ -55,4 +55,5 @@ test("list and latest return stored sessions", (t) => {
   const latest = Session.latest(config, "/one")
   assert.ok(latest)
   assert.equal(latest.cwd, "/one")
+  assert.equal(Session.latest(config, "/elsewhere"), null)
 })

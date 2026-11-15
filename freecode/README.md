@@ -12,7 +12,9 @@ freecode "fix the failing test in src/app.test.js"
 - Per-provider API key rotation (comma-separated keys), cooldowns, and model penalty memory.
 - Retries without tools when a provider rejects function calling.
 - Streaming output, tool calls, sessions, context trimming and retry on context overflow.
-- REPL pickers: `/model` lists ready models by number, `/sessions` lists saved sessions, and the prompt shows the active model + short session id.
+- REPL pickers: `/model` lists ready models by number, `/sessions` lists saved sessions, and the composer footer shows the active model + short session id.
+- opencode-style terminal rendering: card banner, framed composer, `▌ assistant · model` block, braille spinner, and a `✓ model · time` footer per reply.
+- After `/model` or `/sessions`, typing a bare number selects that entry; any other prompt clears the picker.
 - Built-in tools: `read`, `write`, `edit`, `glob`, `grep`, `bash`, `webfetch`.
 - OpenRouter free-model discovery (cached), plus a curated fallback catalog.
 - Local models via Ollama or LM Studio; no key required.
@@ -104,10 +106,15 @@ REPL commands:
 | `/retry` | resend the previous prompt |
 | `/quit` | exit |
 
-The prompt shows live context:
+The REPL renders an opencode-style composer; the bottom border carries the active model and short session id:
 
 ```
-freecode [llm7-gpt-oss-20b · s:6217] ›
+  ╭─ message ────────────────────────────────────────────────╮
+  │ › explain src/index.js
+  ╰─ llm7-gpt-oss-20b · s:6217 ──────────────────────────────╯
+  ▌ assistant · llm7-gpt-oss-20b
+  ...
+  ✓ llm7-gpt-oss-20b · 4.2s
 ```
 
 Tab completion works for commands, model ids and session ids.
@@ -175,7 +182,7 @@ HTTPS requests use a CONNECT tunnel followed by TLS. Local addresses bypass the 
 npm test
 ```
 
-40 local-only tests cover SSE parsing, JSON responses, failover, key rotation, tool fallback, proxy CONNECT, provider summaries, sessions, file tools, the agent loop, and the CLI REPL (banner, model/session pickers) against a local fake OpenAI server. No live provider is called.
+41 local-only tests cover SSE parsing, JSON responses, failover, key rotation, tool fallback, proxy CONNECT, provider summaries, sessions, file tools, the agent loop, and the CLI REPL (banner, composer, model/session pickers) against a local fake OpenAI server. No live provider is called. The script uses `node --test test/*.test.js` so it works on Node 24+ as well as newer Node.
 
 ## Notes
 

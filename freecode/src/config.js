@@ -38,7 +38,8 @@ export function configPaths(cwd = process.cwd()) {
 export function loadConfig(cwd = process.cwd()) {
   const globalConfig = readJson(globalConfigPath(), {}) || {}
   const projectConfig = readJson(projectConfigPath(cwd), {}) || {}
-  const merged = deepMerge(DEFAULT_CONFIG, deepMerge(globalConfig, projectConfig))
+  const raw = deepMerge(DEFAULT_CONFIG, deepMerge(globalConfig, projectConfig))
+  const merged = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : { ...DEFAULT_CONFIG }
   merged.providers = merged.providers && typeof merged.providers === "object" && !Array.isArray(merged.providers) ? merged.providers : {}
   merged.models = Array.isArray(merged.models) ? merged.models : []
   merged.preferred = Array.isArray(merged.preferred) ? merged.preferred : merged.preferred ? [merged.preferred] : []

@@ -594,6 +594,7 @@ export class ModelPool {
       let allowTools = Boolean(entry.tools) && Boolean(options.tools?.length) && !this.toolsBroken.has(entry.id)
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
+          let announced = false
           const result = await chatOnce({
             provider,
             entry,
@@ -603,7 +604,13 @@ export class ModelPool {
             signal: options.signal,
             timeoutMs: options.timeoutMs,
             temperature: this.config.temperature,
-            onDelta: options.onDelta
+            onDelta: (text) => {
+              if (!announced) {
+                announced = true
+                options.onStart?.(entry)
+              }
+              options.onDelta?.(text)
+            }
           })
           if (keys.length) this.keyIndex.set(entry.provider, keys.indexOf(key))
           this.lastWinner = entry.id

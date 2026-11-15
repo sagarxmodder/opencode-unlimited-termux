@@ -33,6 +33,7 @@ export class Agent {
     this.ui = ui
     this.system = systemPrompt({ cwd })
     this.lastModel = null
+    this.lastUsage = null
     this.compressLevel = 0
     this.messages = [{ role: "system", content: this.system }, ...sanitize(session.messages)]
   }
@@ -81,6 +82,7 @@ export class Agent {
           signal,
           timeoutMs: this.config.timeoutMs,
           onDelta: (delta) => this.ui?.delta?.(delta),
+          onStart: (entry) => this.ui?.assistant?.(entry.id),
           onRetry: (info) => this.ui?.retry?.(info)
         })
       } catch (error) {
@@ -94,6 +96,7 @@ export class Agent {
       }
       steps++
       this.lastModel = result.entry || null
+      this.lastUsage = result.usage || this.lastUsage
       const assistant = { role: "assistant", content: result.content || "" }
       if (result.toolCalls.length) {
         assistant.tool_calls = result.toolCalls.map((call) => ({
@@ -115,7 +118,9 @@ export class Agent {
           throw new AbortedError()
         }
         this.ui?.toolCall?.(call.name, call.arguments)
+        const started = Date.now()
         const output = await executeTool(call.name, call.arguments, { cwd: this.cwd })
+        this.ui?.toolResult?.(call.name, !String(output).startsWith("Error:"), Date.now() - started)
         this.recordTool(call.id, output)
       }
     }

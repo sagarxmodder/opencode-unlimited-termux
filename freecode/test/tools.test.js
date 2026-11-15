@@ -49,6 +49,14 @@ test("edit refuses ambiguous matches unless replaceAll is set", async (t) => {
   assert.equal(fs.readFileSync(path.join(cwd, "dup.txt"), "utf8"), "bb\nbb\n")
 })
 
+test("edit keeps dollar sequences in the replacement literal", async (t) => {
+  const cwd = tempDir(t)
+  await executeTool("write", { path: "price.txt", content: "cost = OLD\n" }, { cwd })
+  const edited = await executeTool("edit", { path: "price.txt", oldString: "OLD", newString: "$& $1 $$" }, { cwd })
+  assert.match(edited, /Replaced 1 occurrence/)
+  assert.equal(fs.readFileSync(path.join(cwd, "price.txt"), "utf8"), "cost = $& $1 $$\n")
+})
+
 test("glob and grep skip node_modules and honor filters", async (t) => {
   const cwd = tempDir(t)
   fs.mkdirSync(path.join(cwd, "src"), { recursive: true })

@@ -111,6 +111,7 @@ function createAgent(state) {
 
 async function runPrompt(state, text) {
   const { ui, agent } = state
+  const started = Date.now()
   const controller = new AbortController()
   activeAbort = controller
   const onSigint = () => controller.abort()
@@ -119,6 +120,11 @@ async function runPrompt(state, text) {
   let ok = true
   try {
     await agent.run(text, { signal: controller.signal })
+    ui.done({
+      model: agent.lastModel?.id || "",
+      ms: Date.now() - started,
+      usage: agent.lastUsage
+    })
   } catch (error) {
     if (error instanceof AbortedError) {
       ui.info("aborted")
@@ -149,16 +155,18 @@ function modelPicker(state) {
   const list = readyChoices(state)
   const current = activeModel(state)
   if (!list.length) {
+    state.picker = ""
     ui.info("Koi ready model nahi — keys export karo ya `freecode doctor` chalao.")
     return
   }
+  state.picker = "model"
   ui.line(ui.bold(`model switch (${list.length} ready)`))
   list.forEach((entry, index) => {
     const mark = entry.id === current ? "*" : " "
     const context = entry.context ? `${Math.round(entry.context / 1000)}k` : "?"
     ui.line(` ${String(index + 1).padStart(2)}.${mark} ${entry.id.padEnd(26)} ${String(entry.provider).padEnd(12)} ${context.padStart(5)} ${entry.tools ? "tools" : "no-tools"}`)
   })
-  ui.info("pick: /model <n> · direct: /model <id> · auto: /model auto · catalog: /models all")
+  ui.info(`pick 1-${list.length} · /model <n> · direct: /model <id> · auto: /model auto · catalog: /models all`)
 }
 
 function sessionChoices(state) {
@@ -179,19 +187,21 @@ function sessionPicker(state) {
   const { ui } = state
   const all = sessionChoices(state)
   const list = all.slice(0, 10)
+  state.picker = "session"
   ui.line(ui.bold(`sessions (${all.length})`))
   list.forEach((item, index) => {
     const mark = item.id === state.session.id ? "*" : " "
     const cwd = item.cwd ? truncate(item.cwd, 30) : "—"
     ui.line(` ${String(index + 1).padStart(2)}.${mark} ${item.id} ${String(item.messages).padStart(3)} msgs ${String(item.updatedAt || "").slice(0, 19)} ${cwd}`)
   })
-  ui.info("switch: /session <n|id> · latest: /continue · new: /new · clear: /clear")
+  ui.info(`pick 1-${list.length} · switch: /session <n|id> · latest: /continue · new: /new`)
 }
 
 async function handleCommand(state, input) {
   const { ui, config, pool, cwd } = state
   const [name, ...rest] = input.trim().split(/\s+/)
   const arg = rest.join(" ").trim()
+  if (!["/model", "/sessions", "/session"].includes(name)) state.picker = ""
   switch (name) {
     case "/help":
       printHelp()
@@ -204,6 +214,7 @@ async function handleCommand(state, input) {
         modelPicker(state)
         return false
       }
+      state.picker = ""
       if (arg === "auto") {
         config.model = "auto"
         config.preferred = []
@@ -232,15 +243,16 @@ async function handleCommand(state, input) {
         entry = state.catalog.find((item) => item.id === arg || item.model === arg) || null
       }
       if (entry) {
+        const isReady = list.some((item) => item.id === entry.id)
         config.model = entry.id
         config.preferred = [entry.id]
         state.agent.lastModel = null
-        ui.info(`model → ${entry.id} (${entry.provider})`)
+        ui.info(`model → ${entry.id} (${entry.provider})${isReady ? "" : " · ready nahi, failover use hoga"}`)
       } else {
         config.model = arg
         config.preferred = [arg]
         state.agent.lastModel = null
-        ui.info(`model → ${arg}`)
+        ui.info(`model → ${arg} · catalog me nahi, failover use hoga`)
       }
       return false
     }
@@ -253,6 +265,7 @@ async function handleCommand(state, input) {
         sessionPicker(state)
         return false
       }
+      state.picker = ""
       if (arg === "new") {
         state.session = Session.create(config, cwd)
         state.agent = createAgent(state)
@@ -306,7 +319,11 @@ async function handleCommand(state, input) {
     case "/status": {
       const cooling = [...pool.coolingUntil.entries()].filter(([, until]) => until > Date.now())
       const last = state.agent.lastModel
-      const provider = last ? pool.providerFor(last) : null
+      const wanted = config.preferred?.[0]
+      const chosen = last
+        || state.catalog.find((entry) => entry.id === wanted || entry.model === wanted)
+        || state.catalog.find((entry) => entry.id === config.model)
+      const provider = chosen ? pool.providerFor(chosen) : null
       const lines = [
         `model    ${config.model}${last ? ` · last ${last.id}` : ""}`,
         `provider ${provider?.name || "—"}`,
@@ -467,7 +484,7 @@ export async function main(argv = process.argv.slice(2)) {
     session = Session.create(config, cwd)
   }
   if (!session) session = Session.create(config, cwd)
-  const state = { ui, config, pool, cwd, catalog, session, agent: null }
+  const state = { ui, config, pool, cwd, catalog, session, agent: null, picker: "" }
   state.agent = createAgent(state)
 
   if (options.prompt.length) {
@@ -552,12 +569,24 @@ export async function main(argv = process.argv.slice(2)) {
 
   while (!closed) {
     setPrompt()
+    ui.inputOpen()
     rl.setPrompt(ui.promptText())
     rl.prompt()
     const answer = await takeLine()
-    if (answer === null) break
+    if (answer === null) {
+      ui.inputClose()
+      break
+    }
+    ui.inputClose()
     const text = answer.trim()
     if (!text) continue
+    if (state.picker && /^\d+$/.test(text)) {
+      const kind = state.picker
+      state.picker = ""
+      await handleCommand(state, kind === "session" ? `/session ${text}` : `/model ${text}`)
+      continue
+    }
+    if (!text.startsWith("/")) state.picker = ""
     if (text.startsWith("/")) {
       const quit = await handleCommand(state, text)
       if (quit) break

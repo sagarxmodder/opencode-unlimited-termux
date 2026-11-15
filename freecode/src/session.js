@@ -81,7 +81,7 @@ export class Session {
 
   static latest(config, cwd = process.cwd()) {
     const sessions = Session.list(config)
-    const match = sessions.find((session) => session.cwd === cwd) || sessions[0]
+    const match = sessions.find((session) => session.cwd === cwd)
     return match ? Session.load(config, match.id) : null
   }
 
