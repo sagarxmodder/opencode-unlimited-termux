@@ -131,6 +131,7 @@ banner() {
     "$CB" "$CY" "$C0" "$CB" "$C0" "$CG" "$C0" "$CGY" "$C0" "$CP" "$C0"
   printf '   %s%s█▀█ █▄▄ ██▄ █▀▀ ██▄%s  %sTermux / no-root%s                %sUI %s%s\n' \
     "$CB" "$CY" "$C0" "$CD" "$C0" "$CD" "$MENU_VER" "$C0"
+  printf '   %sunlimited usage  ·  unlimited chat  ·  auto-retry on errors%s\n' "$CGY" "$C0"
   printf '  %s╰────────────────────────────────────────────────────────────╯%s\n' "$CC" "$C0"
 }
 
@@ -237,7 +238,15 @@ install_menu() {
     printf '\n  Choose [0-5]: '
     IFS= read -r c || return 0
     case "$c" in
-      1) [ "$TTY" = 1 ] && clear; command -v pkg >/dev/null 2>&1 && pkg install -y opencode || printf '  ✗ pkg nahi mila\n'; pause_key ;;
+      1) [ "$TTY" = 1 ] && clear
+         if [ -f "$PKG_DIR/scripts/install-opencode.sh" ]; then
+           bash "$PKG_DIR/scripts/install-opencode.sh" || true
+         elif command -v pkg >/dev/null 2>&1; then
+           pkg install -y opencode || printf '  ✗ install fail\n'
+         else
+           printf '  ✗ pkg nahi mila\n'
+         fi
+         pause_key ;;
       2) [ "$TTY" = 1 ] && clear; command -v pkg >/dev/null 2>&1 && pkg upgrade -y opencode || printf '  ✗ pkg nahi mila\n'; pause_key ;;
       3) [ "$TTY" = 1 ] && clear
          if [ -f "$PKG_DIR/docs/OPENCODE-INSTALL.md" ]; then sed -n '1,80p' "$PKG_DIR/docs/OPENCODE-INSTALL.md"
@@ -313,6 +322,7 @@ about_screen() {
   printf '\n   %sFree-model lane for opencode on Android / Termux.%s\n' "$CD" "$C0"
   printf '   No root, no TUN. Egress through Cloudflare WARP;\n'
   printf '   fresh /64 on quota walls + automatic model failover.\n'
+  printf '   %sFEATURES%s  unlimited usage  ·  unlimited chat  ·  auto-retry\n' "$CGY" "$C0"
   printf '\n'
   printf '   %sBUILD%s     UI %s  ·  WARP %s  ·  guard %s\n' "$CGY" "$C0" "$MENU_VER" "${WARP_VER:-?}" "$guard_txt"
   printf '   %sRUNTIME%s   opencode %s\n' "$CGY" "$C0" "$OCV"
@@ -347,6 +357,11 @@ run_action() {
   local idx="$1"
   case "$idx" in
     0) [ "$TTY" = 1 ] && clear
+       if [ -z "$OC" ] && [ "$TTY" = 1 ] && [ -f "$PKG_DIR/scripts/install-opencode.sh" ]; then
+         printf '  %sopencode missing — auto-install try kar raha hoon%s\n\n' "$CY" "$C0"
+         bash "$PKG_DIR/scripts/install-opencode.sh" || true
+         refresh_status
+       fi
        if [ -z "$OC" ]; then
          printf '  %s✗ opencode missing — Install/repair (2) chalao%s\n' "$CR" "$C0"; pause_key
        else

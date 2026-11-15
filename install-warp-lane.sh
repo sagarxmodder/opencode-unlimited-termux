@@ -96,13 +96,25 @@ for c in /data/data/com.termux/files/usr/bin/opencode \
   [ -x "$c" ] && REAL="$c" && break
 done
 
+if [ -z "$REAL" ] && [ "$NO_OPENCODE" = 0 ]; then
+  warn "opencode install nahi hai — auto-install try kar raha hoon"
+  if [ -x "$SRC/scripts/install-opencode.sh" ]; then
+    bash "$SRC/scripts/install-opencode.sh" || true
+  fi
+  for c in /data/data/com.termux/files/usr/bin/opencode \
+           "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
+           "$HOME/.opencode/bin/opencode"; do
+    [ -x "$c" ] && REAL="$c" && break
+  done
+fi
+
 if [ -z "$REAL" ]; then
   warn "opencode install nahi hai"
   printf '\n'
   sed 's/^/      /' "$SRC/docs/OPENCODE-INSTALL.md" 2>/dev/null | head -n 30
   printf '\n'
   if [ "$NO_OPENCODE" = 0 ]; then
-    die "pehle opencode install karo, ya: bash install-warp-lane.sh --no-opencode"
+    die "opencode install fail — docs dekho, ya: bash install-warp-lane.sh --no-opencode"
   fi
   warn "components install ho rahe hain bina opencode ke (--no-opencode)"
 else

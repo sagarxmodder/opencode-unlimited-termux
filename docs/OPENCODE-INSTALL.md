@@ -1,8 +1,9 @@
 # Agar opencode install nahi hai
 
-`install-warp-lane.sh` pehle `opencode` dhoondta hai. Na mile to yeh
-recommendations dikhata hai aur (default) ruk jaata hai. Components install
-karne ke liye: `bash install-warp-lane.sh --no-opencode`.
+`install-warp-lane.sh` pehle `opencode` dhoondta hai. Na mile to
+`scripts/install-opencode.sh` khud install try karta hai (`pkg` → `npm` →
+version verify). Phir bhi fail ho to neeche ke options use karo. Components
+bina opencode ke install karne ke liye: `bash install-warp-lane.sh --no-opencode`.
 
 ## Option 1 — Termux package (sabse simple)
 
