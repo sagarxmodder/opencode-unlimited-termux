@@ -23,7 +23,6 @@ trap 'stty sane 2>/dev/null; echo; exit 130' INT TERM
 
 ITEMS=(
   "Run opencode|unlimited lane kholo"
-  "Run freecode|keyless free-model agent"
   "Unlimited status|models · retries · context"
   "Restart WARP lane|daemon + guard"
   "Rotate WARP /64|naya identity"
@@ -41,46 +40,6 @@ find_opencode() {
     [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
   done
   return 1
-}
-
-find_freecode_dir() {
-  for d in "$PKG_DIR/freecode" "$DEST/freecode" "$HOME/opencode-unlimited-termux/freecode"; do
-    [ -f "$d/bin/freecode" ] && { printf '%s\n' "$d"; return 0; }
-  done
-  return 1
-}
-
-run_freecode() {
-  local exe="" dir=""
-  dir="$(find_freecode_dir || true)"
-  if command -v freecode >/dev/null 2>&1; then
-    exe="$(command -v freecode)"
-  elif [ -n "$dir" ] && [ -f "$dir/install.sh" ] && command -v node >/dev/null 2>&1; then
-    bash "$dir/install.sh" >/dev/null 2>&1 || true
-    hash -r
-    command -v freecode >/dev/null 2>&1 && exe="$(command -v freecode)"
-  fi
-  if [ -z "$exe" ] && command -v node >/dev/null 2>&1 && [ -n "$dir" ]; then
-    exe="node:$dir/bin/freecode"
-  fi
-  if [ -z "$exe" ]; then
-    printf '  %s✗ freecode missing — pkg install nodejs, phir menu → 2%s\n' "$CR" "$C0"
-    pause_key
-    return 0
-  fi
-  local -a cmd
-  case "$exe" in
-    node:*) cmd=(node "${exe#node:}") ;;
-    *) cmd=("$exe") ;;
-  esac
-  local -a envp=()
-  if health_json 2>/dev/null | grep -q '"healthy":[1-9]'; then
-    envp=(HTTPS_PROXY="$PROXY" HTTP_PROXY="$PROXY" ALL_PROXY="$PROXY"
-          https_proxy="$PROXY" http_proxy="$PROXY" all_proxy="$PROXY"
-          NO_PROXY="$LANE_NO_PROXY" no_proxy="$LANE_NO_PROXY")
-  fi
-  env "${envp[@]}" "${cmd[@]}" || true
-  stty sane 2>/dev/null || true
 }
 
 health_json() { curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null; }
@@ -420,15 +379,14 @@ run_action() {
          stty sane 2>/dev/null || true
        fi
        refresh_status ;;
-    1) [ "$TTY" = 1 ] && clear; run_freecode; refresh_status ;;
-    2) unlimited_screen; refresh_status ;;
-    3) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-start.sh"; pause_key; refresh_status ;;
-    4) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-hop.sh"; pause_key; refresh_status ;;
-    5) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-doctor.sh"; pause_key; refresh_status ;;
-    6) logs_menu; refresh_status ;;
-    7) about_screen ;;
-    8) uninstall_confirm ;;
-    9) [ "$TTY" = 1 ] && clear; exit 0 ;;
+    1) unlimited_screen; refresh_status ;;
+    2) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-start.sh"; pause_key; refresh_status ;;
+    3) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-hop.sh"; pause_key; refresh_status ;;
+    4) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-doctor.sh"; pause_key; refresh_status ;;
+    5) logs_menu; refresh_status ;;
+    6) about_screen ;;
+    7) uninstall_confirm ;;
+    8) [ "$TTY" = 1 ] && clear; exit 0 ;;
   esac
 }
 
@@ -443,14 +401,14 @@ if [ "$TTY" = 1 ]; then
       $'\x1b')
         read -rsn2 -t 0.05 k2 || k2=""
         case "$k2" in
-          '[A'|'OA') SEL=$(( (SEL + 9) % 10 )) ;;
-          '[B'|'OB') SEL=$(( (SEL + 1) % 10 )) ;;
+          '[A'|'OA') SEL=$(( (SEL + 8) % 9 )) ;;
+          '[B'|'OB') SEL=$(( (SEL + 1) % 9 )) ;;
         esac
         ;;
-      j|J) SEL=$(( (SEL + 1) % 10 )) ;;
-      k|K) SEL=$(( (SEL + 9) % 10 )) ;;
+      j|J) SEL=$(( (SEL + 1) % 9 )) ;;
+      k|K) SEL=$(( (SEL + 8) % 9 )) ;;
       '') run_action "$SEL" ;;
-      [0-9]) if [ "$key" = 0 ]; then run_action 9; else run_action $((key - 1)); fi ;;
+      [0-9]) if [ "$key" = 0 ]; then run_action 8; else run_action $((key - 1)); fi ;;
       r|R) refresh_status ;;
       q|Q) clear; exit 0 ;;
     esac
@@ -461,7 +419,7 @@ else
     printf '\n  Choose [0-9]: '
     IFS= read -r choice || exit 0
     case "$choice" in
-      0) run_action 9 ;;
+      0) run_action 8 ;;
       1|2|3|4|5|6|7|8|9) run_action $((choice - 1)); refresh_status ;;
     esac
   done

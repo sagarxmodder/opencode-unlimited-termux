@@ -17,17 +17,17 @@
 ## Current quick start
 
 ```sh
-pkg install nodejs            # freecode ke liye
-bash install-warp-lane.sh     # runtime + menu + plugin + freecode copy
-opencode                      # menu: 1 opencode · 2 freecode
+pkg install nodejs            # optional (node 22+ for zycron-ai)
+bash install-warp-lane.sh     # runtime + menu + plugin
+opencode                      # menu: 1 opencode · 2 status
 ```
 
-- Menu: `1` lane TUI, `2` keyless freecode REPL, `3` status, `4` restart,
-  `5` WARP rotate, `6` doctor, `7` logs, `8` about/updates, `9` uninstall.
+- Menu: `1` lane TUI, `2` status, `3` restart, `4` WARP rotate, `5` doctor,
+  `6` logs, `7` about/updates, `8` uninstall, `9` exit.
 - Direct: `oc` (menu), `opencode run "..."` (lane one-shot),
-  `OC_MENU_SKIP=1 opencode` (stock TUI), `freecode` (keyless agent).
-- freecode: LLM7 + Pollinations keyless; optional provider keys for higher
-  limits. See `freecode/README.md`.
+  `OC_MENU_SKIP=1 opencode` (stock TUI).
+- zycron-ai: local-first AI chat + coding agent in `zycron-ai/`
+  (`npm start`). See `zycron-ai/AGENTS.md`.
 
 Termux (Android) adaptation of [opencode-unlimited-usage](https://github.com/sagarxmodder/opencode-unlimited-termux).
 
@@ -95,7 +95,7 @@ See the update at the top and `README-WARP-LANE.md`.
 - `install-warp-lane.sh` — **working Termux lane installer (no root)**
 - `uninstall-warp-lane.sh` — removes the warp lane only
 - `README-WARP-LANE.md` — lane usage, verification, limits
-- `freecode/` — keyless free-model coding agent (LLM7, Pollinations, keyed providers)
+- `zycron-ai/` — local-first AI chat + coding agent (free-model routing, approvals, workspace)
 - `bin/` — warp-minimal binary + opencode shim + SHA-256
 - `scripts/` — menu, lane, start/stop, hop, guard, doctor
 - `plugin/opencode-warp-retry/` — opencode v2 auto-retry plugin

@@ -88,6 +88,12 @@ for w in "${PREFIX:-$HOME/.local}/bin/freecode" "$HOME/.local/bin/freecode"; do
   fi
 done
 
+if [ -d "$DEST/freecode" ]; then
+  rm -rf "$DEST/freecode"
+  ok "retired freecode runtime removed"
+  REMOVED=$((REMOVED + 1))
+fi
+
 # ---------------------------------------------------------------- 3. config
 section "opencode config"
 CFG_DIR="$HOME/.config/opencode"

@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # managed by opencode-unlimited-warp
 #
-# No args + interactive terminal -> launcher menu (1 = opencode, 2 = freecode)
+# No args + interactive terminal -> launcher menu (1 = opencode, 2 = status)
 # Any args (run / serve / --version ...) -> straight through the WARP lane.
 # Bypass the menu once with:  OC_MENU_SKIP=1 opencode
 # If the lane runtime is missing, fall back to the stock opencode binary so

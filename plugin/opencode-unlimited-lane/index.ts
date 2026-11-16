@@ -48,7 +48,13 @@ const MODEL_ERROR =
   /model[^.\n]{0,48}(not found|not available|unavailable|does not exist|deactivated|unsupported|disabled)|no access to (this |the )?model|invalid model|unknown model|model_not_found|no such model/i
 
 const QUOTA_ERROR =
-  /free usage limit|quota|rate.?limit|too many requests|429|402|503|502|service unavailable|capacity|overloaded|try again later|usage limit|daily limit|limit reached|insufficient/i
+  /free usage limit|free usage exceeded|usage exceeded|quota|rate.?limit|too many requests|429|402|503|502|service unavailable|capacity|overloaded|try again later|usage limit|daily limit|limit reached|insufficient|subscribe to|upgrade to/i
+
+// Hard free-tier walls ("Free usage exceeded, subscribe to Go") are account
+// scoped, not IP scoped: rotating the exit alone does not help, so the lane
+// also switches to the next free model.
+const FREE_TIER_ERROR =
+  /free usage exceeded|usage exceeded|subscribe to|upgrade to|upgrade your plan|free tier|plan limit|monthly limit|weekly limit|daily limit|per day limit/i
 
 const NETWORK_ERROR =
   /ECONNRESET|ECONNREFUSED|socket|fetch failed|cannot connect to api|network|timeout|timed out|proxy refused|econnaborted|etimedout/i
@@ -309,11 +315,20 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
 
   // ---------------------------------------------------------------- retry
 
+  async function abortSession(sessionID: string): Promise<void> {
+    try {
+      await client.session.abort({ path: { id: sessionID }, query: { directory } })
+      await sleep(250)
+    } catch (error) {
+      log(`abort failed (${sessionID}): ${String(error)}`)
+    }
+  }
+
   async function continueSession(sessionID: string, model?: ModelRef): Promise<boolean> {
     if (continuing.has(sessionID)) return false
     continuing.add(sessionID)
     try {
-      await client.session.prompt({
+      const request = client.session.prompt({
         path: { id: sessionID },
         body: {
           parts: [{ type: "text", text: "continue", synthetic: true }],
@@ -325,14 +340,30 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
         currentModel.set(sessionID, model)
         log(`switched ${sessionID} to ${model.providerID}/${model.modelID}`)
       }
+      // do not block the event hook for the whole generation
+      Promise.resolve(request)
+        .then(() => log(`auto-continue finished on ${sessionID}`))
+        .catch((error) => log(`auto-continue failed on ${sessionID}: ${String(error)}`))
+        .finally(() => continuing.delete(sessionID))
       log(`auto-continue sent on ${sessionID}`)
       return true
     } catch (error) {
-      log(`auto-continue failed: ${String(error)}`)
-      return false
-    } finally {
       continuing.delete(sessionID)
+      log(`auto-continue failed on ${sessionID}: ${String(error)}`)
+      return false
     }
+  }
+
+  async function switchToNext(sessionID: string, reason: string): Promise<boolean> {
+    const next = await nextFreeModel(sessionID)
+    const current = currentModel.get(sessionID)
+    if (!next || (current && current.providerID === next.providerID && current.modelID === next.modelID)) {
+      log(`no different free model for ${sessionID}; rotating instead`)
+      return retryAfterRotation(sessionID, reason)
+    }
+    log(`free tier wall on ${sessionID} (${reason.slice(0, 100)}) -> ${next.providerID}/${next.modelID}`)
+    await abortSession(sessionID)
+    return continueSession(sessionID, next)
   }
 
   async function retryAfterRotation(sessionID: string, reason: string, model?: ModelRef): Promise<boolean> {
@@ -349,6 +380,10 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
       log(`wall on ${sessionID} (${reason}); rotating WARP`)
       const ok = await rotateWarp()
       if (!ok) {
+        if (model) {
+          log("rotation failed; continuing on the fallback model")
+          return await continueSession(sessionID, model)
+        }
         log("rotation failed; leaving the error visible")
         return false
       }
@@ -397,7 +432,9 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
       try {
         if (!event || typeof event !== "object") return
         const props = event.properties ?? event.data ?? {}
-        const sessionID: string | undefined = props.sessionID ?? props.info?.sessionID
+        const retryData = props.data ?? props
+        const sessionID: string | undefined =
+          props.sessionID ?? props.info?.sessionID ?? retryData?.sessionID ?? props.part?.sessionID
         if (!sessionID) return
 
         if (event.type === "session.compacted") {
@@ -429,6 +466,10 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
             return
           }
           if (QUOTA_ERROR.test(failure)) {
+            if (FREE_TIER_ERROR.test(failure)) {
+              const switched = await switchToNext(sessionID, failure)
+              if (switched) return
+            }
             await retryAfterRotation(sessionID, failure.slice(0, 120))
             return
           }
@@ -438,8 +479,31 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
           }
         }
 
+        if (event.type === "session.status" || event.type === "session.retry.scheduled") {
+          const status = event.type === "session.status" ? props.status : retryData
+          if (!status) return
+          if (event.type === "session.status" && status.type !== "retry") return
+          const message = String(
+            status.message ?? status.action?.reason ?? status.action?.message ?? status.error?.data?.message ?? status.error?.message ?? "",
+          )
+          if (!QUOTA_ERROR.test(message)) return
+          const attempt = status.attempt ?? "?"
+          log(`retry loop on ${sessionID} (attempt ${attempt}): ${message.slice(0, 120)}`)
+          if (FREE_TIER_ERROR.test(message)) {
+            const switched = await switchToNext(sessionID, message)
+            if (switched) return
+          } else {
+            await abortSession(sessionID)
+          }
+          await retryAfterRotation(sessionID, message.slice(0, 120) || "retry wall")
+          return
+        }
+
         if (event.type === "session.error") {
           const message = String(props.error?.data?.message ?? props.error?.message ?? props.error?.name ?? "")
+          const failedProvider = props.error?.data?.providerID ?? props.info?.providerID
+          const failedModel = props.error?.data?.modelID ?? props.info?.modelID
+          if (failedProvider && failedModel) currentModel.set(sessionID, { providerID: failedProvider, modelID: failedModel })
           await handleFailure(message)
           return
         }
@@ -450,6 +514,8 @@ export default async function unlimitedLane(input: any, rawOptions?: Options) {
 
         const failure = String(info.error?.data?.message ?? info.error?.data?.error ?? "")
         if (failure) {
+          // remember the failing model so the fallback picks the next free one
+          if (info.providerID && info.modelID) currentModel.set(sessionID, { providerID: info.providerID, modelID: info.modelID })
           await handleFailure(failure)
           return
         }

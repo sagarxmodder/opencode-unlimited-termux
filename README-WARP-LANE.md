@@ -36,8 +36,6 @@ Yeh:
 5. opencode version ke hisaab se plugin install karta hai:
    v2 → `opencode-warp-retry` (retry hook), v1 → `opencode-unlimited-lane.ts`
    (all-model quota bypass + context guard).
-6. `freecode` ko runtime ke saath copy karta hai aur node milne par `freecode`
-   wrapper install karta hai (keyless: LLM7 + Pollinations).
 
 Agar `opencode` missing hai to installer recommendations dikha kar rukega
 (default). Components only install karne hain to `--no-opencode`.
@@ -58,44 +56,18 @@ Menu (no args + interactive terminal, ↑↓ + Enter):
 
 ```
 1  Run opencode                 unlimited lane kholo
-2  Run freecode                 keyless free-model agent (LLM7 + Pollinations)
-3  Unlimited status             models · retries · context
-4  Restart WARP lane            daemon + guard
-5  Rotate WARP /64              naya identity
-6  Doctor                       health + egress
-7  Logs                         opencode · lane · guard · daemon
-8  About / updates              credits + GitHub update check
-9  Uninstall lane               runtime only
-0  Exit
+2  Unlimited status             models · retries · context
+3  Restart WARP lane            daemon + guard
+4  Rotate WARP /64              naya identity
+5  Doctor                       health + egress
+6  Logs                         opencode · lane · guard · daemon
+7  About / updates              credits + GitHub update check
+8  Uninstall lane               runtime only
+9  Exit
 ```
 
 Status panel is live: lane state, `warp=on/off`, exits healthy/total, served
 count, latency, guard, egress IP, opencode + WARP versions.
-
-## freecode (menu → 2)
-
-`freecode` repo ke saath ship hota hai aur installer use
-`~/.local/share/opencode-unlimited-warp/freecode` me copy karta hai. Menu
-option 2 se REPL khulta hai; lane healthy ho to freecode ka traffic local WARP
-proxy se jata hai, warna direct.
-
-```sh
-freecode                         # REPL
-freecode "fix the failing test"  # one-shot
-freecode doctor                  # providers + keys
-freecode models                  # catalog
-
-# REPL ke andar:
-#   /model      numbered ready-model picker
-#   /sessions   recent sessions; /session <n|id> switch
-#   /new        fresh session
-```
-
-Keyless: LLM7 (`gpt-oss:20b`, `minimax-m2.7`, `DeepSeek-V4-Flash`,
-`glm-5.3-flash`, `codestral`) aur Pollinations (`openai-fast`). Optional keys:
-OpenRouter, Groq, Gemini, Cerebras, Mistral, GitHub Models, SambaNova, NVIDIA.
-Keyless tiers metered hain — LLM7 ka anonymous daily token quota, Pollinations
-~1 reply / 45s / IP. Tests: `cd freecode && npm test` (41, local-only).
 
 ## Unlimited free models (v1 plugin)
 
@@ -127,6 +99,15 @@ Wall ke baad kuch nahi karna: plugin khud rotate + continue karta hai.
 Manual chahiye to `opencode-unlimited-hop`. Direct TUI ke liye
 `OC_MENU_SKIP=1 opencode`.
 
+**Do tarah ki wall hoti hai:**
+
+- *IP-scoped* (429 / rate limit / usage limit) → WARP pool rotate karke same
+  model par retry.
+- *Account-scoped* (jaise `Free usage exceeded, subscribe to Go`) → rotate
+  kaam nahi karta, isliye plugin detect karke next free model par switch
+  karta hai aur wahi session continue karta hai. Available free models:
+  `opencode models` se dekho (deepseek · glm · flint · minimax · beam · …).
+
 ### Two networks, on purpose
 
 `HTTPS_PROXY` points at the WARP proxy so opencode's model traffic exits on a
@@ -140,8 +121,8 @@ because those hosts refuse or drop traffic coming from Cloudflare WARP exits
 |---|---|
 | `bin/warp-minimal` | WARP MASQUE proxy binary (linux/arm64, v0.4.0, SHA-256 verified) |
 | `bin/opencode-shim` | `~/.local/bin/opencode` as installed |
-| `freecode/` | keyless free-model coding agent (LLM7 + Pollinations) |
-| `scripts/menu.sh` | main UI (1 opencode, 2 freecode, status/doctor/logs) |
+| `zycron-ai/` | local-first AI chat + coding agent (free routing, approvals, workspace) |
+| `scripts/menu.sh` | main UI (1 opencode, 2 status, doctor/logs) |
 | `scripts/lane.sh` | proxy env + exec opencode |
 | `scripts/warp-start.sh` | proot + daemon + guard start |
 | `scripts/warp-stop.sh` | stop |
@@ -212,8 +193,6 @@ HTTPS_PROXY=http://127.0.0.1:8789 opencode run "Reply with exactly: LANE-OK"
 ## Limits
 
 - WARP exit pool shared hai; rotation kabhi spent block de sakta hai — hop dobara.
-- freecode keyless tiers metered hain: LLM7 anonymous daily quota,
-  Pollinations ~1 reply / 45s / IP.
 - Free tier per egress /64 metered hai (~100 req/day, ~00:00 UTC reset).
 - v1 par auto-resume plugin ke through hai (opencode >= 1.19.x); bahut purane
   builds par `event` hook na ho to message dobara bhejna padega.

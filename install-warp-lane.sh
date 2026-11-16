@@ -154,10 +154,8 @@ cp "$SRC/scripts/"*.sh "$DEST/scripts/"
 rm -rf "$DEST/plugin/opencode-warp-retry"
 cp -r "$SRC/plugin/opencode-warp-retry" "$DEST/plugin/"
 cp "$SRC/uninstall-warp-lane.sh" "$DEST/scripts/uninstall-warp-lane.sh" 2>/dev/null || true
-if [ -d "$SRC/freecode" ]; then
-  rm -rf "$DEST/freecode"
-  cp -r "$SRC/freecode" "$DEST/freecode"
-fi
+# freecode was retired — purge any leftover runtime copy
+[ -d "$DEST/freecode" ] && rm -rf "$DEST/freecode"
 chmod 700 "$DEST/bin/warp-minimal" "$DEST/bin/opencode-shim" "$DEST/scripts/"*.sh
 chmod 700 "$DEST/scripts/config-util.py" 2>/dev/null || true
 ok "runtime → $DEST"
@@ -231,18 +229,6 @@ for rc in "$HOME/.bashrc" "$HOME/.profile"; do
   fi
 done
 
-if [ -d "$DEST/freecode" ]; then
-  if command -v node >/dev/null 2>&1; then
-    if bash "$DEST/freecode/install.sh" >/dev/null 2>&1; then
-      ok "freecode installed (keyless: LLM7 + Pollinations)"
-    else
-      warn "freecode wrapper install fail — menu option 2 se retry"
-    fi
-  else
-    say "freecode copied — node chahiye: pkg install nodejs (menu → 2)"
-  fi
-fi
-
 # ---------------------------------------------------------------- 6. plugin
 section "opencode plugin"
 CFG_DIR="$HOME/.config/opencode"
@@ -310,7 +296,7 @@ printf '  %s╭─────────────────────�
 printf '    %sREADY%s  %s·  warp lane installed%s\n' "$CB" "$C0" "$CG" "$C0"
 printf '  %s╰────────────────────────────────────────────────────────────╯%s\n' "$CG" "$C0"
 printf '    %s%-10s%s %s\n' "$CGY" "lane" "$C0" "127.0.0.1:8789 · WARP egress"
-printf '    %s%-10s%s %s\n' "$CGY" "menu" "$C0" "opencode → 1 · freecode → 2"
+printf '    %s%-10s%s %s\n' "$CGY" "menu" "$C0" "opencode → 1 · status → 2 · doctor → 5"
 printf '    %s%-10s%s %s\n' "$CGY" "run" "$C0" "opencode   ·   opencode run \"...\""
 printf '    %s%-10s%s %s\n' "$CGY" "tools" "$C0" "oc · opencode-unlimited-hop · -doctor"
 printf '    %s%-10s%s %s\n' "$CGY" "time" "$C0" "${ELAPSED}s"

@@ -1,0 +1,15 @@
+{
+  "name": "zycron-ai",
+  "version": "0.1.0",
+  "description": "Local-first AI chat and coding agent with provider routing, approvals and a code workspace",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "license": "MIT"
+}

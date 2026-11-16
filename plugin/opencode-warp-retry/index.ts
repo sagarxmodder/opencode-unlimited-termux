@@ -170,7 +170,7 @@ function isFreeLimit(error: { type?: string; message?: unknown }) {
   return (
     error.type === "provider.free-limit" ||
     error.type === "provider.quota" ||
-    /free usage limit|quota exceeded|rate.?limit|429/i.test(String(error.message ?? ""))
+    /free usage limit|free usage exceeded|usage exceeded|quota exceeded|rate.?limit|429|subscribe to/i.test(String(error.message ?? ""))
   )
 }
 
