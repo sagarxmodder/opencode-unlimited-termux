@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="ZYCRON Flow — storyboard to video studio">
+  <title>ZYCRON Flow · Video Studio</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/flow.css">
+</head>
+<body>
+  <header class="top">
+    <a class="back" href="/" aria-label="Back to chat" title="Back to chat">←</a>
+    <div class="brand"><span class="spark">✦</span><strong>ZYCRON <em>FLOW</em></strong><span class="tag">STUDIO</span></div>
+    <input id="title" class="title" value="Untitled film" spellcheck="false" aria-label="Film title">
+    <div class="top-actions">
+      <span class="status" id="statusChip">draft</span>
+      <button class="ghost" id="libraryBtn">Library</button>
+      <button class="ghost" id="downloadBtn" disabled>Download</button>
+    </div>
+  </header>
+
+  <main class="studio" id="studio">
+    <aside class="panel scenes-panel">
+      <div class="panel-head">
+        <span>Scenes</span>
+        <span class="count" id="sceneCount">1</span>
+        <button class="mini" id="addSceneBtn" title="Add scene">+</button>
+      </div>
+      <div class="scene-list" id="sceneList"></div>
+      <div class="panel-foot">
+        <button class="mini wide" id="dupSceneBtn">Duplicate scene</button>
+        <button class="mini wide danger" id="delSceneBtn">Delete scene</button>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="stage-frame" id="stageFrame">
+        <canvas id="canvas" width="1280" height="720"></canvas>
+        <video id="player" controls playsinline hidden></video>
+        <div class="stage-empty" id="stageEmpty">
+          <div class="empty-spark">✦</div>
+          <strong>Start your story</strong>
+          <p>Write a scene prompt, generate the storyboard, then render the film into a video.</p>
+        </div>
+        <div class="overlay" id="overlay" hidden>
+          <div class="overlay-card">
+            <div class="spinner"></div>
+            <strong id="overlayTitle">Working…</strong>
+            <p id="overlayText"></p>
+            <div class="bar"><i id="overlayBar"></i></div>
+          </div>
+        </div>
+      </div>
+      <div class="timeline" id="timeline"></div>
+      <div class="transport">
+        <button class="play" id="playBtn" title="Preview"><span id="playIcon">▶</span></button>
+        <span class="time" id="timeLabel">00:00 / 00:00</span>
+        <span class="hint" id="stageHint">storyboard mode · keyless</span>
+        <button class="mini" id="fitBtn" title="Reset preview">Reset</button>
+      </div>
+    </section>
+
+    <aside class="panel controls">
+      <div class="panel-head"><span>Direction</span></div>
+      <div class="control-scroll">
+        <label class="field">
+          <span>Scene prompt</span>
+          <textarea id="scenePrompt" rows="5" placeholder="A lone astronaut walks across a violet desert as two moons rise…"></textarea>
+        </label>
+
+        <div class="row">
+          <label class="field tight">
+            <span>Seconds</span>
+            <input id="sceneDuration" type="range" min="2" max="10" step="0.5" value="4">
+            <b id="durationValue">4.0s</b>
+          </label>
+          <label class="field tight">
+            <span>Camera</span>
+            <select id="sceneMotion">
+              <option value="zoom-in">Zoom in</option>
+              <option value="zoom-out">Zoom out</option>
+              <option value="pan-left">Pan left</option>
+              <option value="pan-right">Pan right</option>
+              <option value="still">Still</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="field tight">
+          <span>Transition</span>
+          <select id="sceneTransition">
+            <option value="fade">Fade</option>
+            <option value="cut">Cut</option>
+          </select>
+        </label>
+
+        <button class="mini wide" id="uploadFrameBtn">Upload frame for this scene</button>
+
+        <div class="field">
+          <span>Style</span>
+          <div class="chips" id="styleChips">
+            <button class="chip on" data-style="cinematic, 35mm film, shallow depth of field, dramatic lighting">Cinematic</button>
+            <button class="chip" data-style="anime key visual, clean lineart, vibrant colors">Anime</button>
+            <button class="chip" data-style="3D render, octane, soft studio lighting">3D</button>
+            <button class="chip" data-style="documentary photography, natural light, 50mm">Docu</button>
+            <button class="chip" data-style="film noir, high contrast black and white, rain">Noir</button>
+            <button class="chip" data-style="cyberpunk, neon violet and teal, volumetric fog">Cyberpunk</button>
+          </div>
+          <input id="styleInput" class="text" value="cinematic, 35mm film, shallow depth of field, dramatic lighting" aria-label="Style prompt">
+        </div>
+
+        <div class="row">
+          <label class="field tight">
+            <span>Aspect</span>
+            <select id="aspect">
+              <option value="16:9">16:9 landscape</option>
+              <option value="9:16">9:16 portrait</option>
+              <option value="1:1">1:1 square</option>
+              <option value="4:3">4:3 classic</option>
+              <option value="3:4">3:4 tall</option>
+            </select>
+          </label>
+          <label class="field tight">
+            <span>Seed</span>
+            <input id="seed" class="text" type="number" min="0" max="999999" value="0">
+          </label>
+        </div>
+
+        <div class="field">
+          <span>Generator</span>
+          <div class="tabs" id="modeTabs">
+            <button class="tab on" data-mode="storyboard">Storyboard · free</button>
+            <button class="tab" data-mode="provider">AI video</button>
+          </div>
+        </div>
+
+        <div class="provider-box" id="imageBox">
+          <label class="field tight">
+            <span>Image generator</span>
+            <select id="imageProviderSelect"></select>
+          </label>
+          <label class="field tight">
+            <span>Image model</span>
+            <input id="imageModel" class="text" placeholder="gpt-image-1 / flux" value="gpt-image-1">
+          </label>
+          <p class="note">No provider picked? Pollinations is tried for free. If it is busy, upload your own frame per scene.</p>
+        </div>
+
+        <div class="provider-box" id="providerBox" hidden>
+          <label class="field tight">
+            <span>Provider</span>
+            <select id="providerSelect"></select>
+          </label>
+          <label class="field tight">
+            <span>Model</span>
+            <input id="modelInput" class="text" placeholder="sora-2 / veo-3.0-generate-preview" value="sora-2">
+          </label>
+          <p class="note">Uses the provider's video API with your key. Keys stay on this device.</p>
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="storyboardBtn">Generate storyboard</button>
+          <button class="primary alt" id="renderBtn" disabled>Render video</button>
+          <p class="note" id="actionNote">Storyboard is keyless and free. Rendering composes the scenes into a WebM film in real time.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <nav class="mobile-tabs" id="mobileTabs">
+    <button data-panel="scenes">Scenes</button>
+    <button data-panel="stage" class="on">Stage</button>
+    <button data-panel="controls">Direction</button>
+  </nav>
+
+  <div class="drawer" id="library" hidden>
+    <div class="drawer-head"><strong>Library</strong><button class="mini" id="closeLibrary">Close</button></div>
+    <div class="library-list" id="libraryList"></div>
+  </div>
+
+  <div class="token" id="tokenGate" hidden>
+    <form class="token-card" id="tokenForm">
+      <strong>ZYCRON Flow</strong>
+      <p>This instance needs an access token.</p>
+      <input id="tokenInput" type="password" placeholder="Access token" autocomplete="current-password">
+      <button class="primary">Unlock</button>
+    </form>
+  </div>
+
+  <input type="file" id="frameInput" accept="image/png,image/jpeg,image/webp" hidden>
+  <div class="toasts" id="toasts"></div>
+  <script type="module" src="/flow.js"></script>
+</body>
+</html>

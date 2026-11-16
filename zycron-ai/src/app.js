@@ -34,6 +34,20 @@ import {
 import { listPlugins, setPluginEnabled } from "./plugins.js"
 import { saveUpload, uploadPath } from "./uploads.js"
 import {
+  assetPath,
+  createVideo,
+  deleteVideo,
+  generateStoryboard,
+  getVideo,
+  listVideos,
+  patchVideo,
+  saveRendered,
+  saveSceneImage,
+  startRender,
+  videoFilePath,
+  videoPublic
+} from "./videos.js"
+import {
   asBool,
   asInt,
   dayKey,
@@ -228,6 +242,7 @@ export function createApp({ db, secret, dataDir, uploadsDir, workspace, publicDi
           projects: listProjects(db),
           plugins: await listPlugins(db, dataDir),
           usage,
+          videos: listVideos(db),
           backup: latestBackup(dataDir)
         })
       }
@@ -530,6 +545,57 @@ export function createApp({ db, secret, dataDir, uploadsDir, workspace, publicDi
         }
       }
 
+      if (pathname === "/api/videos" && method === "GET") {
+        return sendJson(res, 200, { videos: listVideos(db) })
+      }
+      if (pathname === "/api/videos" && method === "POST") {
+        const body = await readJsonBody(req)
+        return sendJson(res, 201, { video: createVideo(db, body) })
+      }
+      if (segments[1] === "videos" && segments[2] === "assets" && segments[3] && method === "GET") {
+        const file = assetPath(dataDir, segments[3])
+        const stat = await fsp.stat(file)
+        res.writeHead(200, {
+          "content-type": mimeFor(file),
+          "content-length": stat.size,
+          "cache-control": "private, max-age=86400"
+        })
+        if (req.method === "HEAD") return res.end()
+        return fs.createReadStream(file).pipe(res)
+      }
+      if (segments[1] === "videos" && segments[2]) {
+        const id = segments[2]
+        if (method === "GET" && segments.length === 3) {
+          return sendJson(res, 200, { video: videoPublic(getVideo(db, id)) })
+        }
+        if (method === "PATCH" && segments.length === 3) {
+          const body = await readJsonBody(req)
+          return sendJson(res, 200, { video: patchVideo(db, id, body) })
+        }
+        if (method === "DELETE" && segments.length === 3) {
+          await deleteVideo(db, dataDir, id)
+          return sendJson(res, 200, { ok: true })
+        }
+        if (method === "POST" && segments[3] === "storyboard") {
+          const body = await readJsonBody(req)
+          return sendJson(res, 200, { video: await generateStoryboard(db, dataDir, secret, id, body) })
+        }
+        if (method === "POST" && segments[3] === "scenes" && segments[5] === "image") {
+          return sendJson(res, 200, { video: await saveSceneImage(db, dataDir, id, segments[4], req) })
+        }
+        if (method === "POST" && segments[3] === "render") {
+          return sendJson(res, 200, { video: startRender(db, dataDir, secret, id) })
+        }
+        if (segments[3] === "file") {
+          if (method === "POST" || method === "PUT") {
+            return sendJson(res, 200, { video: await saveRendered(db, dataDir, id, req) })
+          }
+          if (method === "GET" || method === "HEAD") {
+            return await serveVideoFile(req, res, videoFilePath(db, dataDir, id))
+          }
+        }
+      }
+
       if (pathname === "/api/models" && method === "GET") {
         return sendJson(res, 200, {
           models: listModels(db, {
@@ -676,8 +742,41 @@ export function createApp({ db, secret, dataDir, uploadsDir, workspace, publicDi
       }
     }
 
+    async function serveVideoFile(req, res, file) {
+      const stat = await fsp.stat(file)
+      const type = mimeFor(file)
+      const range = req.headers.range
+      if (range) {
+        const match = /bytes=(\d*)-(\d*)/.exec(range)
+        const start = match && match[1] ? Number(match[1]) : 0
+        const end = match && match[2] ? Math.min(Number(match[2]), stat.size - 1) : stat.size - 1
+        if (start >= stat.size || start > end) {
+          res.writeHead(416, { "content-range": `bytes */${stat.size}` })
+          return res.end()
+        }
+        res.writeHead(206, {
+          "content-type": type,
+          "content-length": end - start + 1,
+          "content-range": `bytes ${start}-${end}/${stat.size}`,
+          "accept-ranges": "bytes",
+          "cache-control": "private, max-age=3600"
+        })
+        if (req.method === "HEAD") return res.end()
+        return fs.createReadStream(file, { start, end }).pipe(res)
+      }
+      res.writeHead(200, {
+        "content-type": type,
+        "content-length": stat.size,
+        "accept-ranges": "bytes",
+        "cache-control": "private, max-age=3600"
+      })
+      if (req.method === "HEAD") return res.end()
+      fs.createReadStream(file).pipe(res)
+    }
+
     async function serveStatic(req, res, pathname) {
-      const relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "")
+      let relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "")
+      if (relative === "flow" || relative === "flow/") relative = "flow.html"
       if (!relative || relative.includes("\0")) throw new HttpError(404, "not found")
       const root = path.resolve(publicDir)
       const file = path.resolve(root, relative)
@@ -692,9 +791,9 @@ export function createApp({ db, secret, dataDir, uploadsDir, workspace, publicDi
       const headers = {
         "content-type": mimeFor(file),
         "content-length": stat.size,
-        "cache-control": relative === "index.html" ? "no-cache" : "public, max-age=3600",
-        "content-security-policy": relative === "index.html"
-          ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        "cache-control": relative.endsWith(".html") ? "no-cache" : "public, max-age=3600",
+        "content-security-policy": relative.endsWith(".html")
+          ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
           : "default-src 'self'"
       }
       res.writeHead(200, headers)

@@ -124,6 +124,25 @@ CREATE TABLE IF NOT EXISTS plugins (
   enabled INTEGER NOT NULL DEFAULT 1,
   config TEXT NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS videos (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  prompt TEXT NOT NULL DEFAULT '',
+  mode TEXT NOT NULL DEFAULT 'storyboard',
+  provider_id TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  aspect TEXT NOT NULL DEFAULT '16:9',
+  duration REAL NOT NULL DEFAULT 0,
+  scenes TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'draft',
+  progress INTEGER NOT NULL DEFAULT 0,
+  error TEXT NOT NULL DEFAULT '',
+  file TEXT NOT NULL DEFAULT '',
+  poster TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_videos_updated ON videos(updated_at);
 `
 
 export function openDb(file) {

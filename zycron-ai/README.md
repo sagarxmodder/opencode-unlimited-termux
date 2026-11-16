@@ -13,6 +13,7 @@ Built and maintained by **@ItzsagarOp**. Zero npm dependencies.
 - **Sessions** with pin, archive, duplicate, rename, export and full-text search.
 - **Projects** with a root `AGENTS.md` guide injected into every model turn.
 - **AMOLED UI** in the opencode/ZYCRON terminal-chat style: block messages with left accent rules, composer hints and a live status bar — in the browser and in the terminal (`npm run tui`).
+- **Flow video studio** at `/flow`: write a scene-by-scene storyboard, generate keyless images, render a WebM film in the browser, or hand the story to a Sora/Veo provider.
 - **Local data**: API keys encrypted at rest, optional token auth, no telemetry.
 
 ## Quick start
@@ -46,6 +47,17 @@ chmod +x $PREFIX/bin/zycron
 ```
 
 It starts the local server if needed, then opens the AMOLED terminal UI: streaming chat with tool/approval modals, sessions, models, providers, projects, undo/redo, and the command palette. Flags: `--url <base>` / `--token <token>` attach to an already running server, `--no-spawn` disables auto-start, `-h` and `-v` print help and the version. Keys: `ctrl+p` palette, `ctrl+n` new, `ctrl+k` sessions, `ctrl+m` models, `ctrl+t` providers, `ctrl+x` leader (`n l m a s c u r b q`), `tab` mode, `esc` interrupt.
+
+## Flow video studio
+
+Open `http://127.0.0.1:8787/flow` (or the **Flow Studio** entry in the sidebar).
+
+1. Write a prompt per scene, pick duration, camera move, style, aspect ratio, and seed.
+2. **Generate storyboard** paints one image per scene: your chosen image provider (`/images/generations`), free Pollinations, or a frame you upload per scene.
+3. **Render video** composites the scenes with zoom/pan moves and fades into a WebM in real time, then downloads it or keeps it in the library.
+4. **AI video** mode sends the full story to a configured provider instead: OpenAI-style `POST /videos` (Sora) or Gemini/Veo `predictLongRunning`, using the provider key saved in Settings.
+
+Storyboard mode needs no key. Files live in `ZYCRON_DATA/videos`; uploads are capped at 200 MB.
 
 ## Configuration
 

@@ -738,3 +738,7 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+a.side-action, a.icon-btn { text-decoration: none; }
+a.icon-btn.flow-link { color: var(--violet); }
+a.icon-btn.flow-link:hover { color: #fff; background: linear-gradient(180deg, rgba(139,92,246,.28), rgba(139,92,246,.12)); border-color: rgba(139,92,246,.5); }

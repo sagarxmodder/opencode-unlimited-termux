@@ -14,26 +14,26 @@ Maintained by **@ItzsagarOp**. This is the working guide for AI coding agents an
 
 ZYCRON AI is a local-first AI chat and coding-agent service. A single Node.js process provides:
 
-- a streaming chat API with provider routing and fallbacks,
+- streaming chat with provider routing and fallbacks,
 - a sandboxed project workspace with file and shell tools,
-- approval-gated mutations with undo/redo snapshots,
-- a vanilla browser client,
-- a zero-dependency terminal client in `src/tui/` with a `zycron` launcher.
+- approval-gated mutations with undo/redo,
+- a browser client, a zero-dependency terminal client (`src/tui/`, `zycron` launcher),
+- a Flow-style video studio (storyboard → WebM, optional Sora/Veo).
 
-There is no cloud dependency, no telemetry, no build step, and no npm dependency. SQLite stores conversations, messages, providers, models, settings, approvals, usage, changes, and plugin state.
+No cloud dependency, telemetry, build step, or npm dependency. SQLite stores chats, providers, settings, approvals, usage, changes, videos, and plugin state.
 
 Design priorities, in order: working software, local data ownership, zero dependencies, safe tool boundaries.
 
 ## 2. Operating rules
 
-1. **Zero dependencies.** Use Node built-ins and browser APIs only. Do not add packages, bundlers, frameworks, or build pipelines without explicit approval.
-2. **Never fake behavior.** No placeholder features, mock data, or buttons that only render. If something is not implemented, say so.
-3. **Preserve user data.** Never drop tables or rows, rewrite settings, delete uploads, or rotate keys in a migration. Add guarded columns/tables.
-4. **Never weaken security.** Keep path sandboxing, symlink checks, approval gates, auth, and secret encryption intact. Tests never justify loosening them.
-5. **Keep IDs stable.** Provider/model IDs are referenced by conversations, usage, and settings.
-6. **Verify, then report.** Run the checks in §16 and state only what actually passed.
-7. **Minimal diffs.** Do not refactor unrelated modules or rename public contracts without need.
-8. **Phone-first.** The UI and terminal client must remain usable on Termux/Android and narrow screens.
+1. **Zero dependencies.** Node built-ins and browser APIs only; no packages, bundlers, or build steps without approval.
+2. **Never fake behavior.** No placeholders, mock data, or buttons that only render.
+3. **Preserve user data.** Never drop tables/rows, rewrite settings, delete uploads, or rotate keys in a migration.
+4. **Never weaken security.** Keep sandboxing, symlink checks, approvals, auth, and key encryption intact.
+5. **Keep IDs stable.** Providers/models are referenced by chats, usage, and settings.
+6. **Verify, then report.** Run §16 checks and state only what passed.
+7. **Minimal diffs.** No unrelated refactors or public-contract renames.
+8. **Phone-first.** Web and terminal clients must work on Termux and narrow screens.
 
 ## 3. Environment and commands
 
@@ -52,8 +52,10 @@ Design priorities, in order: working software, local data ownership, zero depend
 | `ZYCRON_WORKSPACE` | `~/zycron-projects` | Project roots |
 | `ZYCRON_TOKEN` | empty | Optional client auth token |
 | `ZYCRON_SECRET` | generated file | Provider-key encryption material |
+| `ZYCRON_IMAGE_BASE` | `https://image.pollinations.ai/prompt` | Storyboard image endpoint (tests point this at a fake server) |
+| `ZYCRON_VIDEO_POLL_MS` | `5000` | Provider video job poll interval (tests use 60) |
 
-Termux notes: `/tmp` may be read-only; use `$PREFIX/tmp` or another writable temp dir. `rg` may be unavailable; fall back to `grep -r`. Kill test servers by PID, never by a pattern that matches your own command line.
+Termux: `/tmp` may be read-only (use `$PREFIX/tmp`); `rg` may be missing (use `grep -r`); kill test servers by PID, never a pattern matching your own command line.
 
 ## 4. Repository map
 
@@ -68,20 +70,22 @@ src/changes.js         before/after snapshots for undo/redo
 src/backup.js          startup/auto/manual DB backups and pruning
 src/uploads.js         attachment storage and serving
 src/plugins.js         optional local beforeChat/afterResponse hooks
+src/videos.js          Flow studio: storyboards, video providers, file storage
 src/presets.js         bundled provider and free-model catalog
 public/                vanilla browser client (HTML/CSS/JS, no build)
+public/flow.*          Flow video studio page, styles, and renderer
 src/tui/               zero-dependency terminal client
 test/                  node:test suites
 ```
 
-Terminal client modules: `ansi.js` (palette, width/wrap, cell grid, clipboard), `markdown.js` (markdown → styled spans, code blocks), `keys.js` (escape-sequence/paste parser), `api.js` (HTTP/SSE client), `local.js` (health check, server spawn/stop), `render.js` (frame + modals), `app.js` (state, input, SSE), `main.js` (CLI entry), and the executable `bin/zycron`. It must reuse the HTTP/SSE API and the same SQLite data. Never create a second database or duplicate provider/router logic.
+TUI modules: `ansi.js` (palette/width/grid/clipboard), `markdown.js`, `keys.js` (escape/paste parser), `api.js` (HTTP/SSE), `local.js` (health, spawn/stop), `render.js` (frames/modals), `app.js` (state/input/SSE), `main.js` (CLI), plus `bin/zycron`. Reuse the HTTP API and SQLite only; never add a second database or duplicate routing.
 
 ## 5. Chat request lifecycle
 
 1. Client sends `POST /api/chat` with `conversationId?`, `message`, `providerId?`, `model?`, `attachments?`.
 2. `startChat` in `src/app.js` creates a `requestId` and `AbortController`, registers it in the request-scoped `controllers` map, writes SSE headers, emits `ready`, and calls `runChat`.
-3. `runChat` inserts the user message, auto-titles a "New chat" session from the first message, emits `conversation`, and checks daily/monthly token limits.
-4. For each agent step, `candidateList` selects up to **six** ready candidates. Free-first is the default; explicit provider+model bypasses routing.
+3. `runChat` inserts the user message, auto-titles "New chat" from the first message, emits `conversation`, and checks token limits.
+4. Each agent step, `candidateList` picks up to **six** ready candidates; free-first by default, explicit provider+model bypasses routing.
 5. `streamChat` emits `meta`, `delta`, and `thinking`; success clears the candidate cooldown, failure records a 60-second cooldown and emits `notice`.
 6. Usage is recorded and emitted. Tool calls are normalized, executed in order, and persisted as assistant + `tool` rows.
 7. With no tool calls the turn emits `done`. With tools it emits `step` and loops up to `maxAgentSteps` (1–30).
@@ -129,13 +133,20 @@ All responses are JSON. Errors are `{ "error": "message" }` with the matching st
 | GET | `/api/projects/:id/instructions` | Parsed root `AGENTS.md` |
 | GET/POST | `/api/backup` | Latest backup or create one |
 | POST | `/api/uploads` | Store an attachment |
+| GET/POST | `/api/videos` | List films or create a draft |
+| GET/PATCH/DELETE | `/api/videos/:id` | Read, update scenes/settings, delete |
+| POST | `/api/videos/:id/storyboard` | Generate scene images (`style`, `seed`) |
+| POST | `/api/videos/:id/render` | Start a provider video job |
+| GET/POST | `/api/videos/:id/file` | Stream (Range supported) or upload the rendered film |
+| POST | `/api/videos/:id/scenes/:index/image` | Upload a frame for one scene |
+| GET | `/api/videos/assets/:name` | Storyboard image |
 | GET | `/api/plugins` | List plugin hooks |
 | PATCH | `/api/plugins/:id` | Enable or disable a plugin |
 | GET | `/uploads/*`, `/preview/*` | Stored uploads and sandboxed project previews |
 
 ## 7. SSE contract
 
-`POST /api/chat` returns `text/event-stream; charset=utf-8` frames of `event:` plus one-line JSON `data:`, separated by blank lines. Heartbeat: `: keep-alive` every 15 seconds.
+`POST /api/chat` streams `event:` + one-line JSON `data:` frames separated by blank lines; heartbeat `: keep-alive` every 15 s.
 
 | Event | Key payload |
 | --- | --- |
@@ -157,21 +168,21 @@ All responses are JSON. Errors are `{ "error": "message" }` with the matching st
 | `error` | `message`, `status` |
 | `stopped` | `requestId` |
 
-SSE rules: write headers once, flush with `res.write`, never buffer or compress, never emit after `res.end`, and stop on client close. Keep `data:` JSON on one line.
+Write headers once, flush with `res.write`, never buffer/compress or emit after `end`, stop on client close.
 
 ## 8. Data model and migrations
 
 SQLite lives at `ZYCRON_DATA/zycron.db` and is opened with `node:sqlite`.
 
-Core tables: `conversations`, `messages`, `projects`, `providers`, `models`, `settings`, `approvals`, `usage_log`, `changes`, `plugins`.
+Core tables: `conversations`, `messages`, `projects`, `providers`, `models`, `settings`, `approvals`, `usage_log`, `changes`, `plugins`, `videos`.
 
 - Messages: `role` is `user`, `assistant`, or `tool`; `attachments`, `tool_calls`, and `meta` are JSON; ordering is `created_at, rowid`.
 - Conversations: `provider_id`, `model`, `mode`, `project_id`, `pinned`, `archived`, `compact_at`, timestamps.
-- Approvals: JSON payload and `pending | approved | denied`. Only an in-memory pending entry can be resolved by a live turn; old rows may be stale.
-- Changes: before/after snapshots used by undo/redo.
+- Approvals: JSON payload, `pending | approved | denied`; only in-memory pending entries resolve, old rows may be stale.
+- Changes: before/after snapshots for undo/redo.
 - Usage: `usage_log` stores day, month, provider, model, input/output tokens, and request count.
-- Migrations are additive and guarded. Seed with `INSERT OR IGNORE`. Never delete user rows or unknown settings keys.
-- Timestamps are milliseconds since epoch.
+- Videos: `scenes` is JSON (`prompt`, `duration`, `motion`, `transition`, `image`, `seed`); `status` is `draft | storyboard | queued | ready | failed`; files live in `<dataDir>/videos`.
+- Migrations are additive and guarded; seed with `INSERT OR IGNORE`; never delete user rows or unknown keys. Timestamps are ms since epoch.
 
 SQLite calls are synchronous. Keep statements short; do not hold a request open for bulk work outside async tool handlers.
 
@@ -181,17 +192,16 @@ Defaults live in `DEFAULT_SETTINGS` (`src/db.js`) and are stored as JSON values.
 
 `systemPrompt`, `defaultProvider` (`auto`), `defaultModel` (`auto`), `routing` (`free-first`), `maxAgentSteps` (12; clamp 1–30), `contextChars` (60000; clamp 4000–400000), `approvalsRequired` (always true), `dailyTokenLimit` (0 = off), `monthlyTokenLimit` (0 = off), `temperature` (0.7; clamp 0–2), `autoTitle` (true), `theme` (`amoled|midnight`), `accent` (`violet|blue|cyan|rose`).
 
-Settings are global. Per-conversation overrides live on the conversation row: provider, model, mode, project, system prompt.
+Per-conversation overrides live on the conversation row: provider, model, mode, project, system prompt.
 
 ## 10. Providers, models, and routing
 
 - Catalog: **14 providers, 49 models, 44 free, 5 paid** (update these numbers when `src/presets.js` changes).
-- Keyless providers: LLM7, Pollinations, Ollama, LM Studio. Key-required providers stay disabled until a key is saved.
-- A provider is usable when it has a decrypted key or is keyless.
-- Explicit provider+model bypasses routing; both must exist and the provider must be usable.
+- Keyless: LLM7, Pollinations, Ollama, LM Studio. Others stay disabled until a key is saved; usable = decrypted key or keyless.
+- Explicit provider+model bypasses routing; both must exist and be usable.
 - Auto routing prefers free models, then free providers, then recency. `paid-first` reverses the free preference; `manual` is accepted but auto selection still uses the free-first sort.
 - Failed candidates cool down for 60 seconds; the candidate list is deduplicated and capped at six.
-- No usable model must produce a clear 400 asking for a provider/key, not a generic 500.
+- No usable model → clear 400 asking for a provider/key, not a 500.
 - Keys are encrypted with AES-256-GCM using a 32-byte local secret (`secret.key`, mode 0600). Public provider output exposes only `hasKey` and `keyHint`.
 - Keep provider/model IDs stable; upserts must not orphan conversation or usage history.
 
@@ -218,8 +228,9 @@ The browser client is the reference experience and follows an opencode-style ter
 
 - Full-width message blocks with a 3 px left rule: blue for the user, violet for the assistant. Uppercase heads (`YOU · MESSAGE`, `✦ ZYCRON AI`); borderless content.
 - Composer: `Enter` sends, `Shift+Enter` newlines, `↑/↓` history, `/` commands, `@` file mentions, `#` modes.
-- Sidebar/top bar expose sessions, search, model, mode, project, export, and workspace.
-- Workspace modal: project list, explorer, editor tabs, syntax highlighting, `Ctrl+S` save, search, and a terminal panel.
+- Sidebar/top bar: sessions, search, model, mode, project, export, workspace.
+- Workspace modal: project list, explorer, tabs, highlighting, `Ctrl+S`, search, terminal.
+- Flow studio lives at `/flow`: scene rail, stage player, direction panel, style chips, aspect/seed, storyboard generation, real-time canvas capture to WebM, library drawer, and provider video jobs. Linked from the sidebar and top bar (`F`).
 - The welcome hero appears only when the active session has no messages and no stream.
 - Escape all untrusted text. Markdown must pass through `public/markdown.js`; never inject raw HTML.
 - Plain JavaScript with `$`/`$$` helpers and delegated events. No framework, bundler, inline handlers, or build step.
@@ -232,9 +243,8 @@ The browser client is the reference experience and follows an opencode-style ter
 Visual contract:
 
 - True-black AMOLED background (`48;5;16`), thin `┃` gutter, compact spacing, no cards, gradients, or rounded panels.
-- Header; optional sidebar (30 cols at ≥96, 26 at ≥76, hidden below 76); chat viewport; three-row active-task block while busy; bordered multiline composer; one-row status bar.
-- Status bar: eight dots, `esc interrupt` / `enter send`, token count with context percent, `ctrl+p commands`.
-- Thinking/streaming must update without flicker; render is coalesced and never blocks input.
+- Header; optional sidebar (30/26 cols at ≥96/76); chat viewport; three-row task block; bordered composer; one-row status bar (dots, `esc interrupt`, tokens, `ctrl+p commands`).
+- Streaming updates without flicker; render is coalesced and never blocks input.
 
 Input contract:
 
@@ -246,21 +256,19 @@ Input contract:
 
 Engineering rules:
 
-- Enter the alternate screen and disable autowrap; restore cursor, wrap, paste mode, and the alt screen on every exit path, including errors and signals.
-- Render into an off-screen cell grid and emit fixed-width rows; never rely on terminal wrapping for layout.
-- Surface approvals as an explicit allow/deny modal. Never auto-approve. A denial must resolve the server promise.
-- Consume SSE asynchronously; keep a single active turn; stop via `POST /api/chat/:requestId/stop`.
-- Test with pure render/wrap/markdown assertions plus a headless fake-provider integration test. No PTY dependency for tests.
-- Termux: `/storage` does not keep execute bits, so `$PREFIX/bin/zycron` is a small bash wrapper that runs `node .../bin/zycron "$@"`; run `node bin/zycron --help` for the flags.
-- Launcher flags: `--url <base>`, `--token <token>`, `--no-spawn`, `-h/--help`, `-v/--version`; env fallbacks `ZYCRON_URL`/`ZYCRON_TOKEN`. Auto-start uses `server.js` and writes `<dataDir>/tui-server.log`.
-- Tests: `test/tui.test.js` (width/wrap/markdown/keys/frames) and `test/tui-stream.test.js` (fake OpenAI-compatible provider + spawned server).
-- Update this section and `README.md` as modules change; do not describe unfinished pieces as shipped.
+- Enter the alt screen, disable autowrap, and restore cursor/wrap/paste/alt screen on every exit path, including errors and signals.
+- Render into an off-screen cell grid and emit fixed-width rows; never rely on terminal wrapping.
+- Approvals are an explicit allow/deny modal; never auto-approve, and a denial must resolve the server promise.
+- Consume SSE asynchronously; one active turn; stop via \`POST /api/chat/:requestId/stop\`.
+- Test with render/wrap/markdown assertions plus the fake-provider test; no PTY dependency.
+- Termux drops execute bits on `/storage`, so `$PREFIX/bin/zycron` wraps `node .../bin/zycron "$@"`. Flags: `--url`, `--token`, `--no-spawn`, `-h`, `-v`; env `ZYCRON_URL`/`ZYCRON_TOKEN`. Auto-start spawns `server.js` and logs to `<dataDir>/tui-server.log`.
+- Tests: `test/tui.test.js` and `test/tui-stream.test.js` (fake provider + spawned server). Update this section and `README.md` as modules change.
 
 ## 14. Security and sandboxing
 
-- Project paths resolve against the real project root and must never escape it, including through symlinks. Check the resolved target and, for writes, the resolved parent.
-- File reads are capped at 2 MB; command output and runtime are capped; commands run inside the project root.
-- `/uploads` and `/preview` are auth-checked handlers. Never serve `ZYCRON_DATA` or the secret file statically.
+- Project paths resolve against the real root and never escape it, including symlinks; check the target and, for writes, the parent.
+- File reads cap at 2 MB; command output and runtime are capped; commands run inside the project root.
+- `/uploads` and `/preview` require auth. Never serve `ZYCRON_DATA` or the secret file statically.
 - Auth comparison uses `timingSafeEqual`; the server sets `x-content-type-options: nosniff` and `referrer-policy: no-referrer`.
 - Never log API keys, bearer tokens, decrypted secrets, or raw authorization headers. `keyHint` is the only key detail allowed in responses.
 - Treat model output, provider responses, project files, filenames, and attachments as untrusted input.
@@ -286,14 +294,11 @@ Before reporting work complete:
 
 1. `node --check` every changed JavaScript file.
 2. Run `npm test`; add tests for new behavior and failure paths.
-3. Smoke-test with isolated paths on a non-default port:
-   `ZYCRON_DATA=/path/tmp/data ZYCRON_WORKSPACE=/path/tmp/work PORT=18091 node server.js`
-   then check `/api/health`, `/api/bootstrap`, create a project, write/read a file, run a command, and search.
-4. Test provider/agent changes with a **local fake OpenAI-compatible provider** that streams SSE and reports usage. Never use paid or rate-limited remote APIs for tests.
-5. Verify approvals end-to-end: allow, deny, abort, timeout, and stale approval after restart.
-6. Verify project `AGENTS.md` reaches the prompt with `GET /api/projects/:id/instructions` and the assembled messages.
-7. Confirm catalog counts after preset changes (currently 14/49/44/5).
-8. For terminal work, run unit/render tests and a headless SSE test; check widths 50, 80, and 120 where possible.
+3. Smoke-test isolated paths on a non-default port (`PORT=18091 ZYCRON_DATA=... ZYCRON_WORKSPACE=... node server.js`): `/api/health`, `/api/bootstrap`, project create, file write/read, run, search.
+4. Test provider/agent work with a **local fake OpenAI-compatible provider** that streams SSE and reports usage; never paid or rate-limited APIs.
+5. Verify approvals end-to-end: allow, deny, abort, timeout, stale after restart.
+6. Confirm project `AGENTS.md` reaches the prompt (`/api/projects/:id/instructions`) and catalog counts after preset changes (14/49/44/5).
+7. For terminal work, run render tests and the headless SSE test; check widths 50, 80, 120. For Flow, use fake image/Sora/Veo servers.
 
 Tests must not touch the user's real data directory or default port. Clean up child processes and temporary directories.
 
@@ -309,19 +314,17 @@ Tests must not touch the user's real data directory or default port. Clean up ch
 
 ## 18. Known pitfalls
 
-- `src/app.js` matches routes by both `pathname` and `segments`; keep specific routes before the final 404 and method checks explicit.
+- `src/app.js` matches routes by `pathname` and `segments`; keep specific routes before the final 404.
 - `POST /api/chat` owns the response. Never call `sendJson` on an SSE response, and never write after the stream closes.
 - The controllers map is keyed by `requestId`, not conversation ID, and must be cleaned in `finally`.
 - A chat request may create the conversation; read the real ID from `ready`.
 - `auto` is a routing sentinel. Never pass `auto` as a provider model to an upstream API.
-- Persisted approvals can outlive their resolver; after restart expect stale `pending` rows.
-- `settings.approvalsRequired` is forced true by the settings handler.
-- Auto-titling only applies while the title is `New chat`.
+- Persisted approvals can outlive their resolver; expect stale `pending` rows after a restart.
+- `approvalsRequired` is forced true; auto-titling only applies while the title is `New chat`.
 - Context assembly keeps a recent slice under `contextChars` and never starts on a `tool` message.
-- Startup and 30-minute automatic backups are expected; keep pruning.
-- `decodeURIComponent(url.pathname)` can throw on malformed input; the router catch handles it.
-- On Termux, `/tmp` may be read-only and `rg` may be missing.
-- The web UI and terminal UI share one backend; an API shape change requires updating both.
+- Keep startup and 30-minute backups with pruning.
+- Malformed `decodeURIComponent(url.pathname)` is handled by the router catch.
+- Web, terminal, and Flow share one backend; API shape changes must update all three.
 
 ## 19. Never
 
@@ -337,3 +340,13 @@ Tests must not touch the user's real data directory or default port. Clean up ch
 ## 20. Maintenance
 
 Keep this file synchronized with the code. When a route, SSE event, setting, mode, tool, keybinding, or client surface changes, update the matching section here. Prefer precise tables and invariants over prose. Stay under 24,000 characters; tighten wording rather than deleting safety rules.
+
+## 21. Flow video studio
+
+`/flow` is a zero-dependency storyboard-to-video studio served by the same process.
+
+- Storyboard images come from the selected provider's `/images/generations`, else `ZYCRON_IMAGE_BASE` (Pollinations), or a frame uploaded per scene. Assets live in `<dataDir>/videos/assets`; the first becomes `poster`.
+- Rendering is client-side: scenes are drawn to a canvas with a camera move and optional fade, captured via `captureStream(30)` + `MediaRecorder`, then uploaded to `POST /api/videos/:id/file`.
+- Provider mode uses the selected key. OpenAI-style: `POST {base}/videos`, poll `GET {base}/videos/:id`, download `/content`. Veo: `{base}/models/{model}:predictLongRunning` with `x-goog-api-key`, then poll the operation.
+- Jobs run in-process (15-min timeout), persist progress on the `videos` row, and reject duplicates. File serving supports `Range`; uploads cap at 200 MB.
+- `test/videos.test.js` fakes image/Sora/Veo servers via `ZYCRON_IMAGE_BASE` and `ZYCRON_VIDEO_POLL_MS`; never call real providers in tests.
