@@ -165,3 +165,26 @@ test("cancels a stalled stream as soon as the turn is aborted", async () => {
   }
   assert.ok(Date.now() - started < 2000)
 })
+
+test("renders the welcome screen without a session", () => {
+  const frame = renderScreen({
+    cols: 80,
+    rows: 24,
+    sessions: [],
+    projects: [],
+    providers: [],
+    allModels: [],
+    messages: [],
+    composer: "",
+    cursor: 0,
+    model: "auto",
+    mode: "build",
+    tokens: 0,
+    context: 8192,
+    sidebar: true,
+    workspace: "/tmp/zycron-projects"
+  })
+  assert.equal(frame.lines.length, 24)
+  assert.match(frame.text, /ZYCRON AI/)
+  assert.match(frame.text, /\/tmp\/zycron-projects/)
+})

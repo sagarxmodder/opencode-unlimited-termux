@@ -38,6 +38,13 @@ npm start
 npm run tui        # or: node bin/zycron
 ```
 
+On Termux the shared `/sdcard` mount drops execute bits, so link the launcher once:
+
+```bash
+printf '#!/data/data/com.termux/files/usr/bin/bash\nexec node ~/opencode-unlimited-termux/zycron-ai/bin/zycron "$@"\n' > $PREFIX/bin/zycron
+chmod +x $PREFIX/bin/zycron
+```
+
 It starts the local server if needed, then opens the AMOLED terminal UI: streaming chat with tool/approval modals, sessions, models, providers, projects, undo/redo, and the command palette. Flags: `--url <base>` / `--token <token>` attach to an already running server, `--no-spawn` disables auto-start, `-h` and `-v` print help and the version. Keys: `ctrl+p` palette, `ctrl+n` new, `ctrl+k` sessions, `ctrl+m` models, `ctrl+t` providers, `ctrl+x` leader (`n l m a s c u r b q`), `tab` mode, `esc` interrupt.
 
 ## Configuration

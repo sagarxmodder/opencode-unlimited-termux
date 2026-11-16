@@ -185,7 +185,7 @@ function chatLines(state, width) {
   const lines = []
   const messages = state.messages || []
   if (!messages.length && !state.streamingText) {
-    return welcome(width)
+    return welcome(width, state)
   }
   for (const message of messages) {
     const block = messageLines(message, width, state)
@@ -200,7 +200,7 @@ function chatLines(state, width) {
   return lines
 }
 
-function welcome(width) {
+function welcome(width, state) {
   const lines = []
   lines.push([])
   lines.push([span("✦ ZYCRON AI", color.violetBold)])

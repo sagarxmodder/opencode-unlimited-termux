@@ -251,6 +251,7 @@ Engineering rules:
 - Surface approvals as an explicit allow/deny modal. Never auto-approve. A denial must resolve the server promise.
 - Consume SSE asynchronously; keep a single active turn; stop via `POST /api/chat/:requestId/stop`.
 - Test with pure render/wrap/markdown assertions plus a headless fake-provider integration test. No PTY dependency for tests.
+- Termux: `/storage` does not keep execute bits, so `$PREFIX/bin/zycron` is a small bash wrapper that runs `node .../bin/zycron "$@"`; run `node bin/zycron --help` for the flags.
 - Launcher flags: `--url <base>`, `--token <token>`, `--no-spawn`, `-h/--help`, `-v/--version`; env fallbacks `ZYCRON_URL`/`ZYCRON_TOKEN`. Auto-start uses `server.js` and writes `<dataDir>/tui-server.log`.
 - Tests: `test/tui.test.js` (width/wrap/markdown/keys/frames) and `test/tui-stream.test.js` (fake OpenAI-compatible provider + spawned server).
 - Update this section and `README.md` as modules change; do not describe unfinished pieces as shipped.
