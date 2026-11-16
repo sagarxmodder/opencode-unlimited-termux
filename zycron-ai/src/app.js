@@ -44,6 +44,7 @@ import {
   saveRendered,
   saveSceneImage,
   startRender,
+  synthesizeVoice,
   videoFilePath,
   videoPublic
 } from "./videos.js"
@@ -579,6 +580,10 @@ export function createApp({ db, secret, dataDir, uploadsDir, workspace, publicDi
         if (method === "POST" && segments[3] === "storyboard") {
           const body = await readJsonBody(req)
           return sendJson(res, 200, { video: await generateStoryboard(db, dataDir, secret, id, body) })
+        }
+        if (method === "POST" && segments[3] === "voice") {
+          const body = await readJsonBody(req)
+          return sendJson(res, 200, { video: await synthesizeVoice(db, dataDir, secret, id, body) })
         }
         if (method === "POST" && segments[3] === "scenes" && segments[5] === "image") {
           return sendJson(res, 200, { video: await saveSceneImage(db, dataDir, id, segments[4], req) })

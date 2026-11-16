@@ -36,6 +36,14 @@
     </aside>
 
     <section class="stage">
+      <div class="quick" id="quickBar">
+        <textarea id="quickPrompt" rows="2" placeholder="Describe your film — “a neon koi glides through a drowned arcade”"></textarea>
+        <button class="mic" id="quickMic" type="button" title="Speak your idea" aria-label="Speak your idea">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
+        </button>
+        <label class="switch" title="Add a spoken narration track"><input type="checkbox" id="quickVoice" checked><span>Voice</span></label>
+        <button class="primary quick-go" id="quickBtn">Create</button>
+      </div>
       <div class="stage-frame" id="stageFrame">
         <canvas id="canvas" width="1280" height="720"></canvas>
         <video id="player" controls playsinline hidden></video>
@@ -65,10 +73,13 @@
     <aside class="panel controls">
       <div class="panel-head"><span>Direction</span></div>
       <div class="control-scroll">
-        <label class="field">
-          <span>Scene prompt</span>
+        <div class="field">
+          <div class="field-head">
+            <span>Scene prompt</span>
+            <button class="mini mic" id="sceneMic" type="button" title="Dictate this scene">Speak</button>
+          </div>
           <textarea id="scenePrompt" rows="5" placeholder="A lone astronaut walks across a violet desert as two moons rise…"></textarea>
-        </label>
+        </div>
 
         <div class="row">
           <label class="field tight">
@@ -97,6 +108,36 @@
         </label>
 
         <button class="mini wide" id="uploadFrameBtn">Upload frame for this scene</button>
+
+        <div class="field narration">
+          <div class="field-head">
+            <span>Narration</span>
+            <button class="mini" id="voiceBtn" type="button">Generate voice</button>
+          </div>
+          <textarea id="narrationText" rows="3" placeholder="Leave empty to narrate your scene prompts"></textarea>
+          <div class="row">
+            <label class="field tight">
+              <span>Voice</span>
+              <select id="voiceName">
+                <option value="alloy">Alloy</option>
+                <option value="nova" selected>Nova</option>
+                <option value="shimmer">Shimmer</option>
+                <option value="onyx">Onyx</option>
+                <option value="fable">Fable</option>
+                <option value="echo">Echo</option>
+              </select>
+            </label>
+            <label class="field tight">
+              <span>Voice engine</span>
+              <select id="voiceProviderSelect"></select>
+            </label>
+          </div>
+          <div class="row tight">
+            <button class="mini wide" id="voicePreviewBtn" type="button">Preview</button>
+            <button class="mini wide" id="voicePlayBtn" type="button" disabled>Play track</button>
+          </div>
+          <p class="note" id="voiceNote">Free engine needs no key. Video render mixes the track automatically.</p>
+        </div>
 
         <div class="field">
           <span>Style</span>

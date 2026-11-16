@@ -266,14 +266,14 @@ Engineering rules:
 
 ## 14. Security and sandboxing
 
-- Project paths resolve against the real root and never escape it, including symlinks; check the target and, for writes, the parent.
-- File reads cap at 2 MB; command output and runtime are capped; commands run inside the project root.
-- `/uploads` and `/preview` require auth. Never serve `ZYCRON_DATA` or the secret file statically.
-- Auth comparison uses `timingSafeEqual`; the server sets `x-content-type-options: nosniff` and `referrer-policy: no-referrer`.
-- Never log API keys, bearer tokens, decrypted secrets, or raw authorization headers. `keyHint` is the only key detail allowed in responses.
-- Treat model output, provider responses, project files, filenames, and attachments as untrusted input.
-- Do not introduce shell interpolation; pass argument arrays where possible.
-- Keep `approvalsRequired` true. Do not add a bypass setting or silent write path.
+- Project paths resolve against the real root and never escape it, symlinks included; check target and, for writes, parent.
+- Reads cap at 2 MB; output/runtime capped; commands run inside the project root.
+- `/uploads` and `/preview` require auth; never serve `ZYCRON_DATA` or the secret statically.
+- Auth compares with `timingSafeEqual`; server sends `nosniff` and `no-referrer`.
+- Never log keys, tokens, decrypted secrets, or raw auth headers; `keyHint` is the only key detail in responses.
+- Treat model output, provider responses, project files, names, and attachments as untrusted.
+- No shell interpolation; pass argument arrays.
+- Keep `approvalsRequired` true; no bypass setting or silent write path.
 
 ## 15. Coding conventions
 
@@ -294,11 +294,11 @@ Before reporting work complete:
 
 1. `node --check` every changed JavaScript file.
 2. Run `npm test`; add tests for new behavior and failure paths.
-3. Smoke-test isolated paths on a non-default port (`PORT=18091 ZYCRON_DATA=... ZYCRON_WORKSPACE=... node server.js`): `/api/health`, `/api/bootstrap`, project create, file write/read, run, search.
+3. Smoke-test on a non-default port (`PORT=18091 ZYCRON_DATA=... ZYCRON_WORKSPACE=... node server.js`): health, bootstrap, project create, file read/write, run, search.
 4. Test provider/agent work with a **local fake OpenAI-compatible provider** that streams SSE and reports usage; never paid or rate-limited APIs.
 5. Verify approvals end-to-end: allow, deny, abort, timeout, stale after restart.
 6. Confirm project `AGENTS.md` reaches the prompt (`/api/projects/:id/instructions`) and catalog counts after preset changes (14/49/44/5).
-7. For terminal work, run render tests and the headless SSE test; check widths 50, 80, 120. For Flow, use fake image/Sora/Veo servers.
+7. For terminal work, run render tests plus the headless SSE test at widths 50/80/120. For Flow, fake the image/Sora/Veo/TTS servers.
 
 Tests must not touch the user's real data directory or default port. Clean up child processes and temporary directories.
 
@@ -345,8 +345,9 @@ Keep this file synchronized with the code. When a route, SSE event, setting, mod
 
 `/flow` is a zero-dependency storyboard-to-video studio served by the same process.
 
-- Storyboard images come from the selected provider's `/images/generations`, else `ZYCRON_IMAGE_BASE` (Pollinations), or a frame uploaded per scene. Assets live in `<dataDir>/videos/assets`; the first becomes `poster`.
-- Rendering is client-side: scenes are drawn to a canvas with a camera move and optional fade, captured via `captureStream(30)` + `MediaRecorder`, then uploaded to `POST /api/videos/:id/file`.
-- Provider mode uses the selected key. OpenAI-style: `POST {base}/videos`, poll `GET {base}/videos/:id`, download `/content`. Veo: `{base}/models/{model}:predictLongRunning` with `x-goog-api-key`, then poll the operation.
+- Storyboard images come from the picked provider's `/images/generations`, else `ZYCRON_IMAGE_BASE` (Pollinations), or an uploaded frame. Assets live in `<dataDir>/videos/assets`; the first is `poster`.
+- Rendering is client-side: canvas scenes with camera move + fade, captured via `captureStream(30)` and `MediaRecorder`, then uploaded to `POST /api/videos/:id/file`.
+- Provider mode: OpenAI-style `POST {base}/videos` → poll `GET {base}/videos/:id` → `/content`; Veo `{base}/models/{model}:predictLongRunning` + `x-goog-api-key` → poll operation.
 - Jobs run in-process (15-min timeout), persist progress on the `videos` row, and reject duplicates. File serving supports `Range`; uploads cap at 200 MB.
-- `test/videos.test.js` fakes image/Sora/Veo servers via `ZYCRON_IMAGE_BASE` and `ZYCRON_VIDEO_POLL_MS`; never call real providers in tests.
+- Narration: `POST /api/videos/:id/voice` writes `${id}-voice.mp3` from the picked provider's `/audio/speech`, else Google TTS (`ZYCRON_TTS_BASE`). Render mixes it through a `MediaStreamDestination`; dictation uses the browser Speech API and preview uses device `speechSynthesis`.
+- `test/videos.test.js` fakes image/Sora/Veo/TTS servers via env overrides; never call real providers in tests.

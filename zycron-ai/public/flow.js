@@ -23,7 +23,9 @@ const state = {
   previewToken: 0,
   saveTimer: null,
   saveChain: Promise.resolve(),
-  busy: false
+  busy: false,
+  recognition: null,
+  audioContext: null
 }
 
 class FlowError extends Error {}
@@ -138,6 +140,7 @@ function openVideo(video) {
   resizeCanvas()
   loadImages()
   showPlayer(video)
+  renderActions()
   renderAll()
 }
 
@@ -236,6 +239,8 @@ function renderActions() {
   const hasPrompts = state.scenes.some((scene) => scene.prompt.trim())
   const ready = state.scenes.length > 0 && state.scenes.every((scene) => scene.image)
   $("#storyboardBtn").textContent = state.mode === "provider" ? "Generate AI video" : "Generate storyboard"
+  $("#voicePlayBtn").disabled = !state.video?.voice || state.busy
+  $("#voiceBtn").disabled = state.busy
   $("#renderBtn").hidden = state.mode === "provider"
   $("#renderBtn").disabled = !ready || state.busy
   $("#storyboardBtn").disabled = !hasPrompts || state.busy
@@ -260,8 +265,27 @@ function renderImageProviders() {
   }
 }
 
+function renderVoiceProviders() {
+  const select = $("#voiceProviderSelect")
+  if (!select) return
+  const previous = select.value
+  select.innerHTML = ""
+  const free = document.createElement("option")
+  free.value = ""
+  free.textContent = "Free · Google"
+  select.append(free)
+  for (const provider of state.providers) {
+    const option = document.createElement("option")
+    option.value = provider.id
+    option.textContent = provider.name
+    select.append(option)
+  }
+  select.value = previous
+}
+
 function renderProviders() {
   renderImageProviders()
+  renderVoiceProviders()
   const select = $("#providerSelect")
   select.innerHTML = ""
   if (!state.providers.length) {
@@ -651,49 +675,322 @@ function preview() {
   requestAnimationFrame(tick)
 }
 
-function pickMime() {
-  const candidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+function pickMime(withAudio = false) {
+  const candidates = withAudio
+    ? ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]
+    : ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
   for (const candidate of candidates) {
     if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(candidate)) return candidate
   }
   return "video/webm"
 }
 
-async function renderFilm() {
+async function attachVoice(stream, url) {
+  if (!url) return null
+  try {
+    const audio = new Audio()
+    audio.src = url
+    audio.preload = "auto"
+    await new Promise((resolve, reject) => {
+      audio.onloadedmetadata = resolve
+      audio.onerror = () => reject(new Error("voice track failed to load"))
+      setTimeout(resolve, 2500)
+    })
+    const Context = window.AudioContext || window.webkitAudioContext
+    if (!Context) return null
+    state.audioContext = new Context()
+    if (state.audioContext.state === "suspended") await state.audioContext.resume().catch(() => {})
+    const source = state.audioContext.createMediaElementSource(audio)
+    const destination = state.audioContext.createMediaStreamDestination()
+    source.connect(destination)
+    destination.stream.getAudioTracks().forEach((track) => stream.addTrack(track))
+    return audio
+  } catch {
+    closeAudio()
+    return null
+  }
+}
+
+function closeAudio() {
+  try {
+    state.audioContext?.close()
+  } catch {}
+  state.audioContext = null
+}
+
+function titleFromPrompt(prompt) {
+  const words = prompt.replace(/\s+/g, " ").trim().split(" ").slice(0, 7).join(" ")
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+function narrationScript() {
+  const typed = $("#narrationText").value.trim()
+  if (typed) return typed.slice(0, 3800)
+  return state.scenes.map((scene) => scene.prompt.trim()).filter(Boolean).join(". ").slice(0, 3800)
+}
+
+function dictate(target, button) {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!Recognition) return toast("Voice input needs Chrome or Edge", true)
+  if (state.recognition) {
+    state.recognition.stop()
+    state.recognition = null
+    $$(".mic").forEach((node) => node.classList.remove("on", "pulse"))
+    return
+  }
+  const recognition = new Recognition()
+  recognition.lang = "en-US"
+  recognition.interimResults = true
+  recognition.continuous = false
+  const base = target.value.trim()
+  recognition.onresult = (event) => {
+    let transcript = ""
+    for (const result of event.results) transcript += result[0].transcript
+    target.value = `${base ? `${base} ` : ""}${transcript}`.trim()
+    target.dispatchEvent(new Event("input", { bubbles: true }))
+  }
+  const finish = () => {
+    button.classList.remove("on", "pulse")
+    if (state.recognition === recognition) state.recognition = null
+  }
+  recognition.onend = finish
+  recognition.onerror = (event) => {
+    finish()
+    if (event.error !== "aborted") toast("Voice input stopped — check the microphone permission", true)
+  }
+  try {
+    recognition.start()
+  } catch {
+    return toast("Voice input is already starting", true)
+  }
+  button.classList.add("on", "pulse")
+  state.recognition = recognition
+}
+
+async function fallbackFrame(scene, index) {
+  const [width, height] = SIZES[$("#aspect").value] || SIZES["16:9"]
+  const canvas = document.createElement("canvas")
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext("2d")
+  let hash = 0
+  for (const char of `${scene.prompt}${index}`) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  const hue = hash % 360
+  const gradient = ctx.createLinearGradient(0, 0, width, height)
+  gradient.addColorStop(0, `hsl(${hue} 62% 12%)`)
+  gradient.addColorStop(0.55, `hsl(${(hue + 40) % 360} 70% 8%)`)
+  gradient.addColorStop(1, `hsl(${(hue + 300) % 360} 55% 6%)`)
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, width, height)
+  const glow = ctx.createRadialGradient(width * 0.7, height * 0.3, 0, width * 0.7, height * 0.3, width * 0.7)
+  glow.addColorStop(0, `hsla(${hue} 90% 65% / 0.35)`)
+  glow.addColorStop(1, "transparent")
+  ctx.fillStyle = glow
+  ctx.fillRect(0, 0, width, height)
+  ctx.fillStyle = "rgba(255,255,255,0.92)"
+  ctx.textAlign = "left"
+  ctx.textBaseline = "top"
+  const size = Math.round(width * 0.052)
+  ctx.font = `600 ${size}px "Inter", system-ui, sans-serif`
+  const maxWidth = width * 0.78
+  const words = scene.prompt.split(/\s+/)
+  const lines = []
+  let line = ""
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line)
+      line = word
+      if (lines.length === 5) break
+    } else line = test
+  }
+  if (line && lines.length < 6) lines.push(line)
+  lines.slice(0, 6).forEach((text, row) => {
+    ctx.fillText(text, width * 0.09, height * 0.34 + row * size * 1.32)
+  })
+  ctx.fillStyle = "rgba(167,139,250,0.9)"
+  ctx.font = `600 ${Math.round(width * 0.016)}px "Inter", system-ui, sans-serif`
+  ctx.fillText(`ZYCRON FLOW · SCENE ${String(index + 1).padStart(2, "0")}`, width * 0.09, height * 0.82)
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"))
+}
+
+async function paintFallbackScenes(video) {
+  for (let index = 0; index < state.scenes.length; index++) {
+    const blob = await fallbackFrame(state.scenes[index], index)
+    if (!blob) throw new FlowError("could not draw a fallback frame")
+    const response = await fetch(`/api/videos/${encodeURIComponent(video.id)}/scenes/${index}/image`, {
+      method: "POST",
+      headers: authHeaders({ "content-type": "image/png" }),
+      body: blob
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new FlowError(data.error || `frame upload failed (${response.status})`)
+    state.video = data.video
+  }
+  state.scenes = state.video.scenes
+  loadImages()
+  renderAll()
+  return state.video
+}
+
+async function quickCreate() {
+  if (state.busy) return
+  const prompt = $("#quickPrompt").value.trim() || $("#scenePrompt").value.trim()
+  if (!prompt) return toast("Describe your film, or tap the mic and speak", true)
+  const duration = Math.min(8, Math.max(3, Number($("#sceneDuration").value) || 4))
+  state.scenes = [{
+    id: uid(),
+    prompt,
+    duration,
+    motion: $("#sceneMotion").value,
+    transition: "fade",
+    image: "",
+    seed: 0
+  }]
+  state.active = 0
+  state.video = null
+  state.mode = "storyboard"
+  $("#title").value = titleFromPrompt(prompt)
+  syncMode()
+  renderAll()
+  setBusy(true)
+  setStatus("creating", "busy")
+  overlay(true, "Creating film", "Saving the storyboard…", 3)
+  try {
+    const video = await ensureVideo()
+    overlay(true, "Creating film", "Painting the scene…", 10)
+    try {
+      const data = await api(`/api/videos/${encodeURIComponent(video.id)}/storyboard`, {
+        method: "POST",
+        body: {
+          style: $("#styleInput").value.trim(),
+          seed: Number($("#seed").value) || 0,
+          imageProviderId: $("#imageProviderSelect").value || "",
+          imageModel: $("#imageModel").value.trim()
+        }
+      })
+      state.video = data.video
+      state.scenes = data.video.scenes
+    } catch {
+      overlay(true, "Creating film", "Image service busy — drawing typographic frames…", 30)
+      await paintFallbackScenes(video)
+      toast("Image service was unavailable — used typographic frames")
+    }
+    renderLibrary()
+    loadImages()
+    renderAll()
+    if ($("#quickVoice").checked) {
+      overlay(true, "Recording narration", "Synthesizing the voice track…", 90)
+      try {
+        const data = await api(`/api/videos/${encodeURIComponent(state.video.id)}/voice`, {
+          method: "POST",
+          body: {
+            text: narrationScript(),
+            voice: $("#voiceName").value,
+            providerId: $("#voiceProviderSelect").value || "",
+            lang: "en"
+          }
+        })
+        state.video = data.video
+        renderActions()
+      } catch (error) {
+        toast(`Voice skipped: ${error.message}`, true)
+      }
+    }
+    overlay(true, "Rendering film", "Compositing the final cut…", 94)
+    await renderFilm({ autoDownload: true })
+  } catch (error) {
+    setStatus("failed", "bad")
+    toast(error.message, true)
+  } finally {
+    overlay(false)
+    setBusy(false)
+  }
+}
+
+async function generateVoice() {
+  if (state.busy) return
+  const script = narrationScript()
+  if (!script) return toast("Write a scene first", true)
+  setBusy(true)
+  setStatus("voice", "busy")
+  overlay(true, "Recording narration", "Synthesizing the voice track…", 35)
+  try {
+    const video = await ensureVideo()
+    const data = await api(`/api/videos/${encodeURIComponent(video.id)}/voice`, {
+      method: "POST",
+      body: {
+        text: script,
+        voice: $("#voiceName").value,
+        providerId: $("#voiceProviderSelect").value || "",
+        lang: "en"
+      }
+    })
+    state.video = data.video
+    state.videos = [data.video, ...state.videos.filter((item) => item.id !== data.video.id)]
+    renderLibrary()
+    renderActions()
+    toast("Narration ready — render to include it")
+  } catch (error) {
+    toast(error.message, true)
+  } finally {
+    overlay(false)
+    setBusy(false)
+  }
+}
+
+function downloadFilm() {
+  if (!state.video?.file) return
+  const link = document.createElement("a")
+  link.href = state.video.file
+  const ext = state.video.file.endsWith(".webm") ? "webm" : "mp4"
+  link.download = `${(state.video.title || "zycron-flow").replace(/[^\w.-]+/g, "-").toLowerCase()}.${ext}`
+  link.click()
+}
+
+async function renderFilm({ autoDownload = false } = {}) {
   const scenes = state.scenes
   if (!scenes.every((scene) => scene.image)) return toast("Generate the storyboard first", true)
   if (typeof MediaRecorder === "undefined") return toast("This browser cannot record video", true)
   setBusy(true)
   setStatus("rendering", "busy")
   overlay(true, "Rendering film", "Compositing scenes in real time…", 2)
+  let stream = null
+  let audioEl = null
   try {
     const video = await ensureVideo()
     const total = totalDuration()
     const canvas = $("#canvas")
-    const stream = canvas.captureStream(30)
-    const mime = pickMime()
-    const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 })
+    stream = canvas.captureStream(30)
+    audioEl = await attachVoice(stream, video.voice)
+    const mime = pickMime(Boolean(audioEl))
+    const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000, audioBitsPerSecond: 128_000 })
     const chunks = []
     recorder.ondataavailable = (event) => {
       if (event.data.size) chunks.push(event.data)
     }
     const stopped = new Promise((resolve) => (recorder.onstop = resolve))
     recorder.start(1000)
+    if (audioEl) {
+      audioEl.currentTime = 0
+      await audioEl.play().catch(() => toast("Narration could not start — film is silent", true))
+    }
+    const voiceLength = Number(audioEl?.duration) || 0
+    const limit = Math.max(total, voiceLength ? voiceLength + 0.25 : 0)
     const started = performance.now()
     await new Promise((resolve) => {
       const tick = () => {
         const elapsed = (performance.now() - started) / 1000
         drawFrameAt(Math.min(elapsed, total - 0.01))
-        overlay(true, "Rendering film", `${Math.round((elapsed / total) * 100)}% captured`, Math.min(96, (elapsed / total) * 100))
-        $("#timeLabel").textContent = `${fmt(elapsed)} / ${fmt(total)}`
-        if (elapsed >= total) return resolve()
+        overlay(true, "Rendering film", `${Math.round((elapsed / limit) * 100)}% captured`, Math.min(96, (elapsed / limit) * 100))
+        $("#timeLabel").textContent = `${fmt(Math.min(elapsed, total))} / ${fmt(total)}`
+        if (elapsed >= limit) return resolve()
         requestAnimationFrame(tick)
       }
       requestAnimationFrame(tick)
     })
     recorder.stop()
     await stopped
-    stream.getTracks().forEach((track) => track.stop())
     const blob = new Blob(chunks, { type: mime.split(";")[0] })
     if (!blob.size) throw new FlowError("the recording came back empty")
     overlay(true, "Saving film", "Uploading to your workspace…", 98)
@@ -711,12 +1008,19 @@ async function renderFilm() {
     state.videos = [data.video, ...state.videos.filter((item) => item.id !== data.video.id)]
     renderLibrary()
     showPlayer(data.video)
+    renderActions()
     setStatus("ready", "live")
-    toast("Film rendered — download it below")
+    if (autoDownload) downloadFilm()
+    toast(autoDownload ? "Film ready — downloading" : "Film rendered — download it below")
   } catch (error) {
     setStatus("failed", "bad")
     toast(error.message, true)
   } finally {
+    try {
+      audioEl?.pause()
+    } catch {}
+    stream?.getTracks().forEach((track) => track.stop())
+    closeAudio()
     overlay(false)
     setBusy(false)
     drawIdleFrame()
@@ -840,13 +1144,30 @@ function bind() {
   })
   $("#closeLibrary").addEventListener("click", () => ($("#library").hidden = true))
 
-  $("#downloadBtn").addEventListener("click", () => {
-    if (!state.video?.file) return
-    const link = document.createElement("a")
-    link.href = state.video.file
-    const ext = state.video.file.endsWith(".webm") ? "webm" : "mp4"
-    link.download = `${(state.video.title || "zycron-flow").replace(/[^\w.-]+/g, "-").toLowerCase()}.${ext}`
-    link.click()
+  $("#downloadBtn").addEventListener("click", downloadFilm)
+
+  $("#quickBtn").addEventListener("click", quickCreate)
+  $("#quickMic").addEventListener("click", () => dictate($("#quickPrompt"), $("#quickMic")))
+  $("#sceneMic").addEventListener("click", () => dictate($("#scenePrompt"), $("#sceneMic")))
+  $("#quickPrompt").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) quickCreate()
+  })
+  $("#voiceBtn").addEventListener("click", generateVoice)
+  $("#voicePlayBtn").addEventListener("click", () => {
+    if (!state.video?.voice) return
+    const audio = new Audio(state.video.voice)
+    audio.play().catch(() => toast("Could not play the narration", true))
+  })
+  $("#voicePreviewBtn").addEventListener("click", () => {
+    const script = narrationScript()
+    if (!script) return toast("Write a scene first", true)
+    if (!("speechSynthesis" in window)) return toast("This browser cannot preview speech", true)
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(script)
+    utterance.rate = 1
+    utterance.pitch = 1
+    window.speechSynthesis.speak(utterance)
+    toast("Previewing with the device voice")
   })
 
   $$("#mobileTabs button").forEach((button) => {

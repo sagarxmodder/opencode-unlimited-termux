@@ -36,6 +36,7 @@ export function videoPublic(row) {
     error: row.error,
     file: row.file,
     poster: row.poster,
+    voice: row.voice || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -298,6 +299,89 @@ export async function saveSceneImage(db, dataDir, id, index, req, { limit = 20 *
     id
   )
   return videoPublic(getVideo(db, id))
+}
+
+export async function synthesizeVoice(db, dataDir, secret, id, { text = "", voice = "alloy", lang = "en", providerId = "", model = "" } = {}) {
+  getVideo(db, id)
+  const script = String(text || "").trim().slice(0, 4000)
+  if (!script) throw new HttpError(400, "write a narration script first")
+  const audio = providerId
+    ? await providerSpeech(db, secret, providerId, model, voice, script)
+    : await googleSpeech(script, lang)
+  const dir = assetDir(dataDir)
+  await fsp.mkdir(dir, { recursive: true, mode: 0o700 })
+  const ext = audio.type.includes("wav") ? "wav" : audio.type.includes("ogg") ? "ogg" : "mp3"
+  const name = `${id}-voice.${ext}`
+  await fsp.writeFile(path.join(dir, name), audio.buffer)
+  run(db, "UPDATE videos SET voice = ?, updated_at = ? WHERE id = ?", `/api/videos/assets/${name}`, now(), id)
+  return videoPublic(getVideo(db, id))
+}
+
+async function providerSpeech(db, secret, providerId, model, voice, text) {
+  const provider = providerRow(db, providerId)
+  if (!provider) throw new HttpError(404, "voice provider no longer exists")
+  const key = providerKey(provider, secret)
+  if (!key) throw new HttpError(400, `${provider.name} has no API key`)
+  const base = provider.base_url.replace(/\/+$/, "")
+  const response = await fetch(`${base}/audio/speech`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: model || "gpt-4o-mini-tts", input: text, voice, response_format: "mp3" }),
+    signal: AbortSignal.timeout(120_000)
+  })
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "")
+    throw new HttpError(502, `voice provider failed (${response.status})${detail ? `: ${detail.slice(0, 160)}` : ""}`)
+  }
+  const type = response.headers.get("content-type") || "audio/mpeg"
+  const buffer = Buffer.from(await response.arrayBuffer())
+  if (buffer.length < 256) throw new HttpError(502, "voice provider returned empty audio")
+  return { buffer, type }
+}
+
+async function googleSpeech(text, lang) {
+  const hosts = process.env.ZYCRON_TTS_BASE
+    ? [process.env.ZYCRON_TTS_BASE]
+    : ["https://translate.google.com/translate_tts", "https://translate.googleapis.com/translate_tts"]
+  const locale = /^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(lang) ? lang : "en"
+  const chunks = []
+  let rest = text.replace(/\s+/g, " ").trim()
+  while (rest) {
+    let size = Math.min(180, rest.length)
+    if (size < rest.length) {
+      const slice = rest.slice(0, size)
+      const cut = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf(", "), slice.lastIndexOf(" "))
+      if (cut > 60) size = cut + 1
+    }
+    chunks.push(rest.slice(0, size))
+    rest = rest.slice(size).trim()
+  }
+  let lastError = null
+  for (const base of hosts) {
+    try {
+      const buffers = []
+      for (const chunk of chunks) {
+        const url = `${base}?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(locale)}&total=1&idx=0&textlen=${chunk.length}&q=${encodeURIComponent(chunk)}`
+        const response = await fetch(url, {
+          headers: { "user-agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/124 Safari/537.36" },
+          signal: AbortSignal.timeout(30_000)
+        })
+        if (!response.ok) throw new Error(`speech service returned ${response.status}`)
+        const type = response.headers.get("content-type") || ""
+        if (!type.startsWith("audio/")) throw new Error("speech service returned non-audio")
+        const buffer = Buffer.from(await response.arrayBuffer())
+        if (buffer.length < 256) throw new Error("speech service returned empty audio")
+        buffers.push(buffer)
+      }
+      return { buffer: Buffer.concat(buffers), type: "audio/mpeg" }
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw new HttpError(
+    502,
+    `free voice service is unreachable (${lastError?.message || "no audio"}) — add an OpenAI-compatible provider and choose it as the voice engine`
+  )
 }
 
 function setProgress(db, id, progress) {

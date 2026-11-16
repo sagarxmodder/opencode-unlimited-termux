@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS videos (
   error TEXT NOT NULL DEFAULT '',
   file TEXT NOT NULL DEFAULT '',
   poster TEXT NOT NULL DEFAULT '',
+  voice TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -155,6 +156,7 @@ export function openDb(file) {
   ensureColumn(db, "conversations", "mode", "TEXT NOT NULL DEFAULT 'build'")
   ensureColumn(db, "conversations", "compact_at", "INTEGER NOT NULL DEFAULT 0")
   ensureColumn(db, "conversations", "archived", "INTEGER NOT NULL DEFAULT 0")
+  ensureColumn(db, "videos", "voice", "TEXT NOT NULL DEFAULT ''")
   seed(db)
   return db
 }

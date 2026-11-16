@@ -12,6 +12,7 @@ const PNG = Buffer.from(
   "base64"
 )
 const MP4 = Buffer.concat([Buffer.from("fake-mp4-"), Buffer.alloc(256, 7)])
+const MP3 = Buffer.concat([Buffer.from("ID3-fake-"), Buffer.alloc(1024, 3)])
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -28,6 +29,17 @@ function imageServer() {
     }
     res.writeHead(200, { "content-type": "image/png" })
     res.end(PNG)
+  })
+}
+
+function ttsServer() {
+  return createServer((req, res) => {
+    if (!req.url.startsWith("/speech")) {
+      res.writeHead(404).end()
+      return
+    }
+    res.writeHead(200, { "content-type": "audio/mpeg" })
+    res.end(MP3)
   })
 }
 
@@ -51,6 +63,14 @@ function soraServer() {
     if (req.method === "GET" && req.url === "/v1/videos/job-1/content") {
       res.writeHead(200, { "content-type": "video/mp4" })
       res.end(MP4)
+      return
+    }
+    if (req.method === "POST" && req.url === "/v1/audio/speech") {
+      req.resume()
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "audio/mpeg" })
+        res.end(MP3)
+      })
       return
     }
     if (req.method === "POST" && req.url === "/v1/images/generations") {
@@ -117,7 +137,9 @@ test("video studio: storyboard, assets, upload, range and delete", { timeout: 12
   const data = await mkdtemp(join(tmpdir(), "zycron-video-data-"))
   const workspace = await mkdtemp(join(tmpdir(), "zycron-video-ws-"))
   const images = imageServer()
+  const tts = ttsServer()
   const imagePort = await listen(images)
+  const ttsPort = await listen(tts)
   const port = 18195
   const baseUrl = `http://127.0.0.1:${port}`
   let child = null
@@ -130,6 +152,7 @@ test("video studio: storyboard, assets, upload, range and delete", { timeout: 12
         ZYCRON_DATA: data,
         ZYCRON_WORKSPACE: workspace,
         ZYCRON_IMAGE_BASE: `http://127.0.0.1:${imagePort}/prompt`,
+        ZYCRON_TTS_BASE: `http://127.0.0.1:${ttsPort}/speech`,
         ZYCRON_VIDEO_POLL_MS: "60",
         ZYCRON_TOKEN: ""
       },
@@ -169,6 +192,16 @@ test("video studio: storyboard, assets, upload, range and delete", { timeout: 12
     const assetBytes = Buffer.from(await assetResponse.arrayBuffer())
     assert.ok(assetBytes.equals(PNG))
 
+    const voiced = await api.request(`/api/videos/${created.video.id}/voice`, {
+      method: "POST",
+      body: { text: "A violet desert under two moons.", voice: "nova", lang: "en" }
+    })
+    assert.match(voiced.video.voice, /^\/api\/videos\/assets\/.+\.mp3$/)
+    const voiceResponse = await fetch(`${baseUrl}${voiced.video.voice}`)
+    assert.equal(voiceResponse.status, 200)
+    assert.equal(voiceResponse.headers.get("content-type"), "audio/mpeg")
+    assert.ok(Buffer.from(await voiceResponse.arrayBuffer()).equals(MP3))
+
     const uploadResponse = await fetch(`${baseUrl}/api/videos/${created.video.id}/file`, {
       method: "POST",
       headers: { "content-type": "video/webm" },
@@ -207,6 +240,7 @@ test("video studio: storyboard, assets, upload, range and delete", { timeout: 12
       })
     }
     await new Promise((resolve) => images.close(resolve))
+    await new Promise((resolve) => tts.close(resolve))
     await rm(data, { recursive: true, force: true })
     await rm(workspace, { recursive: true, force: true })
   }
@@ -237,12 +271,18 @@ test("video studio: renders through openai and gemini video providers", { timeou
     })
     const api = new ZycronApi({ baseUrl })
 
-    const openai = (await api.saveProvider({ name: "Fake Sora", baseUrl: `http://127.0.0.1:${soraPort}/v1`, kind: "openai" })).provider
+    const openai = (await api.saveProvider({ name: "Fake Sora", baseUrl: `http://127.0.0.1:${soraPort}/v1`, kind: "openai", apiKey: "sk-test" })).provider
 
     const draft = await api.request("/api/videos", {
       method: "POST",
       body: { title: "Provider stills", aspect: "16:9", scenes: [{ prompt: "a paper lantern", duration: 3 }] }
     })
+    const voiced = await api.request(`/api/videos/${draft.video.id}/voice`, {
+      method: "POST",
+      body: { text: "A paper lantern in the void.", voice: "alloy", providerId: openai.id }
+    })
+    assert.match(voiced.video.voice, /^\/api\/videos\/assets\/.+\.mp3$/)
+
     const painted = await api.request(`/api/videos/${draft.video.id}/storyboard`, {
       method: "POST",
       body: { imageProviderId: openai.id, imageModel: "gpt-image-1" }
