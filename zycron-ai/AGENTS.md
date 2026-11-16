@@ -314,17 +314,17 @@ Tests must not touch the user's real data directory or default port. Clean up ch
 
 ## 18. Known pitfalls
 
-- `src/app.js` matches routes by `pathname` and `segments`; keep specific routes before the final 404.
+- `src/app.js` routes on `pathname`/`segments`; specific routes before the 404.
 - `POST /api/chat` owns the response. Never call `sendJson` on an SSE response, and never write after the stream closes.
 - The controllers map is keyed by `requestId`, not conversation ID, and must be cleaned in `finally`.
-- A chat request may create the conversation; read the real ID from `ready`.
-- `auto` is a routing sentinel. Never pass `auto` as a provider model to an upstream API.
-- Persisted approvals can outlive their resolver; expect stale `pending` rows after a restart.
-- `approvalsRequired` is forced true; auto-titling only applies while the title is `New chat`.
-- Context assembly keeps a recent slice under `contextChars` and never starts on a `tool` message.
-- Keep startup and 30-minute backups with pruning.
-- Malformed `decodeURIComponent(url.pathname)` is handled by the router catch.
-- Web, terminal, and Flow share one backend; API shape changes must update all three.
+- A chat may create the conversation; read the real ID from `ready`.
+- `auto` is a routing sentinel; never pass it upstream as a model.
+- Saved approvals can outlive their resolver; expect stale `pending` rows after restart.
+- `approvalsRequired` is forced true; auto-title only while the title is `New chat`.
+- Context assembly keeps a recent slice under `contextChars`, never starting on a `tool` message.
+- Keep startup and 30-min backups with pruning.
+- Malformed `decodeURIComponent(url.pathname)` is caught by the router.
+- Web, TUI, and Flow share one backend; update all three on API changes.
 
 ## 19. Never
 
@@ -345,9 +345,10 @@ Keep this file synchronized with the code. When a route, SSE event, setting, mod
 
 `/flow` is a zero-dependency storyboard-to-video studio served by the same process.
 
-- Storyboard images come from the picked provider's `/images/generations`, else `ZYCRON_IMAGE_BASE` (Pollinations), or an uploaded frame. Assets live in `<dataDir>/videos/assets`; the first is `poster`.
-- Rendering is client-side: canvas scenes with camera move + fade, captured via `captureStream(30)` and `MediaRecorder`, then uploaded to `POST /api/videos/:id/file`.
+- Storyboard images come from the picked provider's `/images/generations`, else `ZYCRON_IMAGE_BASE`, or an upload. Assets live in `<dataDir>/videos/assets`; the first is `poster`.
+- Rendering is client-side: canvas scenes with camera move + fade, captured via `captureStream(30)` + `MediaRecorder`, then uploaded to `POST /api/videos/:id/file`. Frame controls (`out_scale`, `fit`, `zoom`, `trim_start`, `trim_end`) drive canvas size, crop, and the rendered range.
+- `imageToken` forwards a Pollinations pollen key; the free tier 429s after one image.
 - Provider mode: OpenAI-style `POST {base}/videos` → poll `GET {base}/videos/:id` → `/content`; Veo `{base}/models/{model}:predictLongRunning` + `x-goog-api-key` → poll operation.
-- Jobs run in-process (15-min timeout), persist progress on the `videos` row, and reject duplicates. File serving supports `Range`; uploads cap at 200 MB.
+- Jobs run in-process (15-min timeout), persist progress on the row, and reject duplicates. File serving supports `Range`; uploads cap at 200 MB.
 - Narration: `POST /api/videos/:id/voice` writes `${id}-voice.mp3` from the picked provider's `/audio/speech`, else Google TTS (`ZYCRON_TTS_BASE`). Render mixes it through a `MediaStreamDestination`; dictation uses the browser Speech API and preview uses device `speechSynthesis`.
 - `test/videos.test.js` fakes image/Sora/Veo/TTS servers via env overrides; never call real providers in tests.

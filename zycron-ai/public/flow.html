@@ -169,6 +169,41 @@
           </label>
         </div>
 
+        <div class="field frame-box">
+          <span>Frame &amp; size</span>
+          <div class="row">
+            <label class="field tight">
+              <span>Output</span>
+              <select id="outSize">
+                <option value="1">720p</option>
+                <option value="1.5">1080p</option>
+              </select>
+            </label>
+            <label class="field tight">
+              <span>Fit</span>
+              <select id="fitMode">
+                <option value="cover">Crop to fill</option>
+                <option value="contain">Fit with bars</option>
+              </select>
+            </label>
+          </div>
+          <label class="field tight">
+            <span>Zoom <b id="zoomValue">100%</b></span>
+            <input id="zoomRange" type="range" min="100" max="160" step="2" value="100">
+          </label>
+          <div class="row">
+            <label class="field tight">
+              <span>Trim start</span>
+              <input id="trimStart" class="text" type="number" min="0" step="0.5" value="0">
+            </label>
+            <label class="field tight">
+              <span>Trim end</span>
+              <input id="trimEnd" class="text" type="number" min="0" step="0.5" value="0">
+            </label>
+          </div>
+          <p class="note" id="frameNote">Trim end 0 keeps the full film · crop fills the frame.</p>
+        </div>
+
         <div class="field">
           <span>Generator</span>
           <div class="tabs" id="modeTabs">
@@ -186,7 +221,11 @@
             <span>Image model</span>
             <input id="imageModel" class="text" placeholder="gpt-image-1 / flux" value="gpt-image-1">
           </label>
-          <p class="note">No provider picked? Pollinations is tried for free. If it is busy, upload your own frame per scene.</p>
+          <label class="field tight">
+            <span>Pollen key · optional</span>
+            <input id="imageToken" class="text" type="password" placeholder="pk_… for unlimited Pollinations" autocomplete="off">
+          </label>
+          <p class="note">Free Pollinations allows about one image every 45 seconds per IP. Add a pollen key for unlimited scenes, or upload frames.</p>
         </div>
 
         <div class="provider-box" id="providerBox" hidden>

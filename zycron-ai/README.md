@@ -53,7 +53,7 @@ It starts the local server if needed, then opens the AMOLED terminal UI: streami
 Open `http://127.0.0.1:8787/flow` (or the **Flow Studio** entry in the sidebar).
 
 1. Type an idea in the **Create** bar (or tap the mic and speak) and hit **Create** — it writes the scene, paints it, narrates it, renders the film, and downloads it in one pass.
-2. Or work scene by scene: prompt, duration, camera move, style, aspect ratio, seed. **Generate storyboard** paints each scene with your image provider (`/images/generations`), free Pollinations, or an uploaded frame; if painting fails it falls back to typographic frames.
+2. Or work scene by scene: prompt, duration, camera move, style, aspect ratio, seed, plus **Frame & size** (720p/1080p, crop-to-fill or fit-with-bars, zoom, trim start/end). **Generate storyboard** paints each scene with your image provider (`/images/generations`), free Pollinations, or an uploaded frame. Free Pollinations allows roughly one image per 45 s per IP — paste a pollen key in **Image generator** for unlimited scenes.
 3. **Narration**: dictation uses the browser Speech API, **Preview** speaks with the device voice, and **Generate voice** writes an MP3 track via the picked provider's `/audio/speech` or the free Google TTS engine. **Render video** mixes the track into the WebM.
 4. **AI video** mode sends the full story to a configured provider instead: OpenAI-style `POST /videos` (Sora) or Gemini/Veo `predictLongRunning`, using the provider key saved in Settings.
 

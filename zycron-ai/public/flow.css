@@ -496,7 +496,8 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 15p
 .field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .field-head > span { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
 .field-head .mini { padding: 3px 9px; font-size: 10px; }
-.narration { border-top: 1px dashed var(--line); padding-top: 12px; }
+.narration, .frame-box { border-top: 1px dashed var(--line); padding-top: 12px; }
+.frame-box input[type="range"] { accent-color: var(--violet-2); width: 100%; }
 .row.tight { gap: 6px; }
 .field .row .field.tight select, .field .row .field.tight input { min-width: 0; }
 

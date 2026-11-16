@@ -1,4 +1,5 @@
 const TOKEN_KEY = "zycron.token"
+const POLLEN_KEY = "zycron.pollen"
 const $ = (selector, root = document) => root.querySelector(selector)
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)]
 
@@ -25,7 +26,8 @@ const state = {
   saveChain: Promise.resolve(),
   busy: false,
   recognition: null,
-  audioContext: null
+  audioContext: null,
+  frame: { outScale: 1, fit: "cover", zoom: 1, trimStart: 0, trimEnd: 0 }
 }
 
 class FlowError extends Error {}
@@ -119,8 +121,13 @@ function newDraft() {
   state.images = []
   $("#title").value = "Untitled film"
   $("#aspect").value = "16:9"
+  $("#outSize").value = "1"
+  $("#fitMode").value = "cover"
+  $("#zoomRange").value = "100"
+  $("#trimStart").value = "0"
+  $("#trimEnd").value = "0"
+  applyFrame()
   syncMode()
-  resizeCanvas()
   renderAll()
 }
 
@@ -136,6 +143,12 @@ function openVideo(video) {
   $("#aspect").value = SIZES[video.aspect] ? video.aspect : "16:9"
   if (video.providerId) $("#providerSelect").value = video.providerId
   if (video.model) $("#modelInput").value = video.model
+  $("#outSize").value = Number(video.outScale) === 1.5 ? "1.5" : "1"
+  $("#fitMode").value = video.fit === "contain" ? "contain" : "cover"
+  $("#zoomRange").value = String(Math.round((Number(video.zoom) || 1) * 100))
+  $("#trimStart").value = String(Number(video.trimStart) || 0)
+  $("#trimEnd").value = String(Number(video.trimEnd) || 0)
+  applyFrame()
   syncMode()
   resizeCanvas()
   loadImages()
@@ -350,14 +363,45 @@ function syncMode() {
   $("#imageBox").hidden = state.mode !== "storyboard"
 }
 
-function resizeCanvas() {
-  const [width, height] = SIZES[$("#aspect").value] || SIZES["16:9"]
+function frameConfig() {
+  const base = SIZES[$("#aspect").value] || SIZES["16:9"]
+  const outScale = Number($("#outSize").value) || 1
+  const zoom = Math.max(1, Number($("#zoomRange").value) / 100 || 1)
+  const total = totalDuration()
+  const trimStart = Math.min(Math.max(0, Number($("#trimStart").value) || 0), Math.max(0, total - 1))
+  const rawEnd = Number($("#trimEnd").value) || 0
+  const trimEnd = rawEnd > trimStart ? Math.min(rawEnd, total) : total
+  return {
+    width: Math.round(base[0] * outScale),
+    height: Math.round(base[1] * outScale),
+    fit: $("#fitMode").value === "contain" ? "contain" : "cover",
+    zoom,
+    trimStart,
+    trimEnd: Math.max(trimStart + 0.5, trimEnd)
+  }
+}
+
+function applyFrame() {
+  const config = frameConfig()
+  state.frame = {
+    outScale: Number($("#outSize").value) || 1,
+    fit: config.fit,
+    zoom: config.zoom,
+    trimStart: config.trimStart,
+    trimEnd: config.trimEnd
+  }
+  $("#zoomValue").textContent = `${Math.round(config.zoom * 100)}%`
+  $("#frameNote").textContent = `Trim ${config.trimStart.toFixed(1)}s → ${config.trimEnd.toFixed(1)}s · ${config.width}×${config.height} · ${config.fit === "contain" ? "bars" : "crop"}`
   const canvas = $("#canvas")
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width
-    canvas.height = height
+  if (canvas.width !== config.width || canvas.height !== config.height) {
+    canvas.width = config.width
+    canvas.height = config.height
     drawIdleFrame()
   }
+}
+
+function resizeCanvas() {
+  applyFrame()
 }
 
 function currentStore() {
@@ -367,7 +411,12 @@ function currentStore() {
     scenes: state.scenes,
     mode: state.mode,
     providerId: $("#providerSelect").value || "",
-    model: $("#modelInput").value.trim()
+    model: $("#modelInput").value.trim(),
+    outScale: Number($("#outSize").value) || 1,
+    fit: $("#fitMode").value,
+    zoom: (Number($("#zoomRange").value) || 100) / 100,
+    trimStart: Number($("#trimStart").value) || 0,
+    trimEnd: Number($("#trimEnd").value) || 0
   }
 }
 
@@ -444,7 +493,8 @@ async function generateStoryboard() {
         style: $("#styleInput").value.trim(),
         seed: Number($("#seed").value) || 0,
         imageProviderId: $("#imageProviderSelect").value || "",
-        imageModel: $("#imageModel").value.trim()
+        imageModel: $("#imageModel").value.trim(),
+        imageToken: $("#imageToken").value.trim()
       }
     })
     state.video = data.video
@@ -572,7 +622,13 @@ function drawIdleFrame() {
 }
 
 function drawSceneStill(ctx, image, width, height) {
-  const base = Math.max(width / image.width, height / image.height) * 1.04
+  drawImageFit(ctx, image, width, height, 1.04)
+}
+
+function drawImageFit(ctx, image, width, height, scale = 1) {
+  const cover = state.frame.fit !== "contain"
+  const fit = (cover ? Math.max : Math.min)(width / image.width, height / image.height)
+  const base = fit * scale * state.frame.zoom
   const drawWidth = image.width * base
   const drawHeight = image.height * base
   ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
@@ -626,7 +682,9 @@ function drawFrameAt(time) {
 
 function drawMotion(ctx, image, motion, p, width, height) {
   const camera = cameraAt(motion, p, width)
-  const base = Math.max(width / image.width, height / image.height) * camera.scale
+  const cover = state.frame.fit !== "contain"
+  const fit = (cover ? Math.max : Math.min)(width / image.width, height / image.height)
+  const base = fit * camera.scale * state.frame.zoom
   const drawWidth = image.width * base
   const drawHeight = image.height * base
   ctx.drawImage(
@@ -866,7 +924,8 @@ async function quickCreate() {
           style: $("#styleInput").value.trim(),
           seed: Number($("#seed").value) || 0,
           imageProviderId: $("#imageProviderSelect").value || "",
-          imageModel: $("#imageModel").value.trim()
+          imageModel: $("#imageModel").value.trim(),
+          imageToken: $("#imageToken").value.trim()
         }
       })
       state.video = data.video
@@ -960,6 +1019,9 @@ async function renderFilm({ autoDownload = false } = {}) {
   try {
     const video = await ensureVideo()
     const total = totalDuration()
+    const trimStart = Math.min(state.frame.trimStart, Math.max(0, total - 0.5))
+    const trimEnd = Math.min(Math.max(state.frame.trimEnd, trimStart + 0.5), total)
+    const length = Math.max(0.5, trimEnd - trimStart)
     const canvas = $("#canvas")
     stream = canvas.captureStream(30)
     audioEl = await attachVoice(stream, video.voice)
@@ -972,18 +1034,18 @@ async function renderFilm({ autoDownload = false } = {}) {
     const stopped = new Promise((resolve) => (recorder.onstop = resolve))
     recorder.start(1000)
     if (audioEl) {
-      audioEl.currentTime = 0
+      audioEl.currentTime = Math.min(trimStart, Math.max(0, (Number(audioEl.duration) || 0) - 0.05))
       await audioEl.play().catch(() => toast("Narration could not start — film is silent", true))
     }
     const voiceLength = Number(audioEl?.duration) || 0
-    const limit = Math.max(total, voiceLength ? voiceLength + 0.25 : 0)
+    const limit = Math.max(length, voiceLength > trimStart ? voiceLength - trimStart + 0.25 : 0)
     const started = performance.now()
     await new Promise((resolve) => {
       const tick = () => {
         const elapsed = (performance.now() - started) / 1000
-        drawFrameAt(Math.min(elapsed, total - 0.01))
+        drawFrameAt(Math.min(trimStart + elapsed, trimEnd - 0.01))
         overlay(true, "Rendering film", `${Math.round((elapsed / limit) * 100)}% captured`, Math.min(96, (elapsed / limit) * 100))
-        $("#timeLabel").textContent = `${fmt(Math.min(elapsed, total))} / ${fmt(total)}`
+        $("#timeLabel").textContent = `${fmt(Math.min(trimStart + elapsed, trimEnd))} / ${fmt(trimEnd)}`
         if (elapsed >= limit) return resolve()
         requestAnimationFrame(tick)
       }
@@ -1038,9 +1100,27 @@ function bind() {
     loadImages()
     scheduleSave()
   })
+  for (const id of ["outSize", "fitMode", "zoomRange", "trimStart", "trimEnd"]) {
+    const node = $(`#${id}`)
+    node.addEventListener("input", () => {
+      applyFrame()
+      scheduleSave()
+    })
+    node.addEventListener("change", () => {
+      applyFrame()
+      scheduleSave()
+    })
+  }
   $("#seed").addEventListener("input", scheduleSave)
   $("#modelInput").addEventListener("input", scheduleSave)
   $("#providerSelect").addEventListener("change", scheduleSave)
+  const pollen = localStorage.getItem(POLLEN_KEY)
+  if (pollen) $("#imageToken").value = pollen
+  $("#imageToken").addEventListener("change", () => {
+    const value = $("#imageToken").value.trim()
+    if (value) localStorage.setItem(POLLEN_KEY, value)
+    else localStorage.removeItem(POLLEN_KEY)
+  })
 
   $("#scenePrompt").addEventListener("input", (event) => {
     const scene = activeScene()

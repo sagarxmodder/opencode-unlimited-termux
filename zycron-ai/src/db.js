@@ -140,6 +140,11 @@ CREATE TABLE IF NOT EXISTS videos (
   file TEXT NOT NULL DEFAULT '',
   poster TEXT NOT NULL DEFAULT '',
   voice TEXT NOT NULL DEFAULT '',
+  out_scale REAL NOT NULL DEFAULT 1,
+  fit TEXT NOT NULL DEFAULT 'cover',
+  zoom REAL NOT NULL DEFAULT 1,
+  trim_start REAL NOT NULL DEFAULT 0,
+  trim_end REAL NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -157,6 +162,11 @@ export function openDb(file) {
   ensureColumn(db, "conversations", "compact_at", "INTEGER NOT NULL DEFAULT 0")
   ensureColumn(db, "conversations", "archived", "INTEGER NOT NULL DEFAULT 0")
   ensureColumn(db, "videos", "voice", "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, "videos", "out_scale", "REAL NOT NULL DEFAULT 1")
+  ensureColumn(db, "videos", "fit", "TEXT NOT NULL DEFAULT 'cover'")
+  ensureColumn(db, "videos", "zoom", "REAL NOT NULL DEFAULT 1")
+  ensureColumn(db, "videos", "trim_start", "REAL NOT NULL DEFAULT 0")
+  ensureColumn(db, "videos", "trim_end", "REAL NOT NULL DEFAULT 0")
   seed(db)
   return db
 }

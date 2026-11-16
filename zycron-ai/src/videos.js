@@ -37,6 +37,11 @@ export function videoPublic(row) {
     file: row.file,
     poster: row.poster,
     voice: row.voice || "",
+    outScale: Number(row.out_scale || 1),
+    fit: row.fit === "contain" ? "contain" : "cover",
+    zoom: Number(row.zoom || 1),
+    trimStart: Number(row.trim_start || 0),
+    trimEnd: Number(row.trim_end || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -60,10 +65,11 @@ export function createVideo(db, input = {}) {
   if (scenes.length > 20) throw new HttpError(400, "maximum 20 scenes")
   const id = uid()
   const title = String(input.title || scenes[0].prompt || "Untitled film").slice(0, 160)
+  const framing = frameValues(input)
   run(
     db,
-    `INSERT INTO videos (id, title, prompt, mode, provider_id, model, aspect, duration, scenes, status, progress, error, file, poster, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 0, '', '', '', ?, ?)`,
+    `INSERT INTO videos (id, title, prompt, mode, provider_id, model, aspect, duration, scenes, status, progress, error, file, poster, out_scale, fit, zoom, trim_start, trim_end, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 0, '', '', '', ?, ?, ?, ?, ?, ?, ?)`,
     id,
     title,
     String(input.prompt || "").slice(0, 4000),
@@ -73,6 +79,11 @@ export function createVideo(db, input = {}) {
     aspect,
     scenes.reduce((sum, scene) => sum + scene.duration, 0),
     JSON.stringify(scenes),
+    framing.outScale,
+    framing.fit,
+    framing.zoom,
+    framing.trimStart,
+    framing.trimEnd,
     now(),
     now()
   )
@@ -106,6 +117,11 @@ export function patchVideo(db, id, input = {}) {
     fields.push("model = ?")
     values.push(String(input.model || "").slice(0, 120))
   }
+  if ([input.outScale, input.fit, input.zoom, input.trimStart, input.trimEnd].some((value) => value !== undefined)) {
+    const framing = frameValues({ ...videoPublic(getVideo(db, id)), ...input })
+    fields.push("out_scale = ?", "fit = ?", "zoom = ?", "trim_start = ?", "trim_end = ?")
+    values.push(framing.outScale, framing.fit, framing.zoom, framing.trimStart, framing.trimEnd)
+  }
   if (input.mode !== undefined) {
     fields.push("mode = ?")
     values.push(input.mode === "provider" ? "provider" : "storyboard")
@@ -130,6 +146,14 @@ export async function deleteVideo(db, dataDir, id) {
     names = await fsp.readdir(assets)
   } catch {}
   await Promise.all(names.filter((name) => name.startsWith(`${id}-`)).map((name) => fsp.rm(path.join(assets, name), { force: true })))
+}
+
+function frameValues(input) {
+  const outScale = clamp(Number(input.outScale) || 1, 0.5, 2)
+  const zoom = clamp(Number(input.zoom) || 1, 1, 1.8)
+  const trimStart = Math.max(0, Number(input.trimStart) || 0)
+  const trimEnd = Math.max(0, Number(input.trimEnd) || 0)
+  return { outScale, fit: input.fit === "contain" ? "contain" : "cover", zoom, trimStart, trimEnd }
 }
 
 function normalizeScenes(input, fallbackPrompt = "") {
@@ -171,7 +195,8 @@ export function assetPath(dataDir, name) {
   return file
 }
 
-export async function generateStoryboard(db, dataDir, secret, id, { style = "", seed = 0, negative = "", imageProviderId = "", imageModel = "" } = {}) {
+export async function generateStoryboard(db, dataDir, secret, id, { style = "", seed = 0, negative = "", imageProviderId = "", imageModel = "", imageToken = "" } = {}) {
+  const pollen = String(imageToken || "").trim().slice(0, 200)
   const row = getVideo(db, id)
   if (active.has(id)) throw new HttpError(409, "video is already generating")
   active.add(id)
@@ -189,7 +214,7 @@ export async function generateStoryboard(db, dataDir, secret, id, { style = "", 
       const sceneSeed = Number(seed || 0) + index * 97 + 11
       const image = imageProviderId
         ? await providerImage(db, secret, imageProviderId, imageModel, prompt, width, height)
-        : await fetchImage(`${IMAGE_BASE}/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${sceneSeed}&nologo=true`)
+        : await fetchImage(`${IMAGE_BASE}/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${sceneSeed}&nologo=true`, pollen)
       const ext = image.type === "image/png" ? "png" : "jpg"
       const name = `${id}-${index}.${ext}`
       await fsp.writeFile(path.join(dir, name), image.buffer)
@@ -213,12 +238,20 @@ export async function generateStoryboard(db, dataDir, secret, id, { style = "", 
   }
 }
 
-async function fetchImage(url) {
+async function fetchImage(url, token = "") {
+  const headers = { "user-agent": "zycron-ai/0.1" }
+  if (token) headers.authorization = `Bearer ${token}`
   let lastError = null
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(150_000), headers: { "user-agent": "zycron-ai/0.1" } })
-      if (!response.ok) throw new Error(`image provider returned ${response.status}`)
+      const response = await fetch(url, { signal: AbortSignal.timeout(150_000), headers })
+      if (!response.ok) {
+        const detail = (await response.text().catch(() => "")).replace(/\s+/g, " ").trim().slice(0, 220)
+        const error = new Error(`image provider returned ${response.status}${detail ? `: ${detail}` : ""}`)
+        error.status = response.status
+        error.retryAfter = Number(response.headers.get("retry-after")) || 0
+        throw error
+      }
       const type = response.headers.get("content-type") || "image/jpeg"
       if (!type.startsWith("image/")) throw new Error(`image provider returned ${type}`)
       const buffer = Buffer.from(await response.arrayBuffer())
@@ -226,6 +259,15 @@ async function fetchImage(url) {
       return { buffer, type }
     } catch (error) {
       lastError = error
+      if (error.status === 401 || error.status === 403) break
+      if (error.status === 429) {
+        if (!token) {
+          throw new HttpError(429, `image service is rate limited: ${error.message}. Add a pollen key in Image generator, or upload frames per scene.`)
+        }
+        const wait = Math.min(45, error.retryAfter || 8) * 1000
+        await new Promise((resolve) => setTimeout(resolve, wait))
+        continue
+      }
       await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)))
     }
   }

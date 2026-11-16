@@ -192,6 +192,23 @@ test("video studio: storyboard, assets, upload, range and delete", { timeout: 12
     const assetBytes = Buffer.from(await assetResponse.arrayBuffer())
     assert.ok(assetBytes.equals(PNG))
 
+    const framed = await api.request(`/api/videos/${created.video.id}`, {
+      method: "PATCH",
+      body: { outScale: 1.5, fit: "contain", zoom: 1.2, trimStart: 1, trimEnd: 4.5 }
+    })
+    assert.equal(framed.video.outScale, 1.5)
+    assert.equal(framed.video.fit, "contain")
+    assert.equal(framed.video.zoom, 1.2)
+    assert.equal(framed.video.trimStart, 1)
+    assert.equal(framed.video.trimEnd, 4.5)
+    const clamped = await api.request(`/api/videos/${created.video.id}`, {
+      method: "PATCH",
+      body: { outScale: 9, zoom: 0.1, fit: "stretch" }
+    })
+    assert.equal(clamped.video.outScale, 2)
+    assert.equal(clamped.video.zoom, 1)
+    assert.equal(clamped.video.fit, "cover")
+
     const voiced = await api.request(`/api/videos/${created.video.id}/voice`, {
       method: "POST",
       body: { text: "A violet desert under two moons.", voice: "nova", lang: "en" }
@@ -241,6 +258,93 @@ test("video studio: storyboard, assets, upload, range and delete", { timeout: 12
     }
     await new Promise((resolve) => images.close(resolve))
     await new Promise((resolve) => tts.close(resolve))
+    await rm(data, { recursive: true, force: true })
+    await rm(workspace, { recursive: true, force: true })
+  }
+})
+
+function limitedImageServer() {
+  let hits = 0
+  return createServer((req, res) => {
+    if (!req.url.startsWith("/prompt")) {
+      res.writeHead(404).end()
+      return
+    }
+    hits++
+    if (hits === 1) {
+      res.writeHead(429, { "content-type": "application/json", "retry-after": "1" })
+      res.end(JSON.stringify({ error: "Free limit reached: one image every 45 seconds" }))
+      return
+    }
+    res.writeHead(200, { "content-type": "image/png" })
+    res.end(PNG)
+  })
+}
+
+test("video studio: pollen token retries rate limited images", { timeout: 120_000 }, async () => {
+  const root = new URL("..", import.meta.url).pathname
+  const data = await mkdtemp(join(tmpdir(), "zycron-video-data-"))
+  const workspace = await mkdtemp(join(tmpdir(), "zycron-video-ws-"))
+  const images = limitedImageServer()
+  const imagePort = await listen(images)
+  const port = 18197
+  const baseUrl = `http://127.0.0.1:${port}`
+  let child = null
+  try {
+    child = spawn(process.execPath, ["server.js"], {
+      cwd: root,
+      env: {
+        ...process.env,
+        PORT: String(port),
+        ZYCRON_DATA: data,
+        ZYCRON_WORKSPACE: workspace,
+        ZYCRON_IMAGE_BASE: `http://127.0.0.1:${imagePort}/prompt`,
+        ZYCRON_VIDEO_POLL_MS: "60",
+        ZYCRON_TOKEN: ""
+      },
+      stdio: ["ignore", "pipe", "pipe"]
+    })
+    let logs = ""
+    child.stdout.on("data", (chunk) => (logs += chunk))
+    child.stderr.on("data", (chunk) => (logs += chunk))
+    await waitHealth(baseUrl).catch((error) => {
+      throw new Error(`${error.message}\n${logs.slice(-1500)}`)
+    })
+    const api = new ZycronApi({ baseUrl })
+
+    const draft = await api.request("/api/videos", {
+      method: "POST",
+      body: { title: "Rate limited", scenes: [{ prompt: "a violet desert", duration: 3 }] }
+    })
+    const bare = await fetch(`${baseUrl}/api/videos/${draft.video.id}/storyboard`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    })
+    assert.equal(bare.status, 429)
+    assert.match((await bare.json()).error, /rate limited/i)
+
+    const keyed = await api.request(`/api/videos/${draft.video.id}/storyboard`, {
+      method: "POST",
+      body: { imageToken: "pk_test" }
+    })
+    assert.equal(keyed.video.status, "storyboard")
+    assert.match(keyed.video.scenes[0].image, /^\/api\/videos\/assets\//)
+  } finally {
+    if (child) {
+      child.kill("SIGTERM")
+      await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL")
+          resolve()
+        }, 4000)
+        child.once("exit", () => {
+          clearTimeout(timer)
+          resolve()
+        })
+      })
+    }
+    await new Promise((resolve) => images.close(resolve))
     await rm(data, { recursive: true, force: true })
     await rm(workspace, { recursive: true, force: true })
   }
