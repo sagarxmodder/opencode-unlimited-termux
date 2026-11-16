@@ -1,6 +1,6 @@
 # ZYCRON AI
 
-Local-first AI chat and coding-agent web app for Termux and desktop. One Node.js process, a browser UI, SQLite persistence, streaming model calls, a sandboxed workspace, and approval-gated tools.
+Local-first AI chat and coding-agent for Termux and desktop. One Node.js process, a browser UI plus an AMOLED terminal client, SQLite persistence, streaming model calls, a sandboxed workspace, and approval-gated tools.
 
 Built and maintained by **@ItzsagarOp**. Zero npm dependencies.
 
@@ -12,7 +12,7 @@ Built and maintained by **@ItzsagarOp**. Zero npm dependencies.
 - **Workspace editor** with explorer, tabs, syntax highlighting, project search and a terminal panel.
 - **Sessions** with pin, archive, duplicate, rename, export and full-text search.
 - **Projects** with a root `AGENTS.md` guide injected into every model turn.
-- **AMOLED UI** in the opencode/ZYCRON terminal-chat style: block messages with left accent rules, composer hints and a live status bar.
+- **AMOLED UI** in the opencode/ZYCRON terminal-chat style: block messages with left accent rules, composer hints and a live status bar — in the browser and in the terminal (`npm run tui`).
 - **Local data**: API keys encrypted at rest, optional token auth, no telemetry.
 
 ## Quick start
@@ -31,6 +31,14 @@ pkg install nodejs
 cd ~/opencode-unlimited-termux/zycron-ai
 npm start
 ```
+
+## Terminal client
+
+```bash
+npm run tui        # or: node bin/zycron
+```
+
+It starts the local server if needed, then opens the AMOLED terminal UI: streaming chat with tool/approval modals, sessions, models, providers, projects, undo/redo, and the command palette. Flags: `--url <base>` / `--token <token>` attach to an already running server, `--no-spawn` disables auto-start, `-h` and `-v` print help and the version. Keys: `ctrl+p` palette, `ctrl+n` new, `ctrl+k` sessions, `ctrl+m` models, `ctrl+t` providers, `ctrl+x` leader (`n l m a s c u r b q`), `tab` mode, `esc` interrupt.
 
 ## Configuration
 
