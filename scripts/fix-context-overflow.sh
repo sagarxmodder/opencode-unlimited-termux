@@ -109,11 +109,12 @@ const config = {
   ...existing,
   $schema: existing.$schema ?? "https://opencode.ai/config.json",
   compaction: {
+    ...(existing.compaction ?? {}),
     auto: true,
     prune: true,
+    // Small head keeps the summary request itself under the gateway cap.
     buffer: 4000,
-    keep: { tokens: 12000 },
-    ...(existing.compaction ?? {})
+    keep: { tokens: 2000 }
   },
   provider: {
     ...(existing.provider ?? {}),
