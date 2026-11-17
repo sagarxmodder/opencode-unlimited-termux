@@ -198,3 +198,25 @@ HTTPS_PROXY=http://127.0.0.1:8789 opencode run "Reply with exactly: LANE-OK"
   builds par `event` hook na ho to message dobara bhejna padega.
 - No kill-switch: lane explicit-proxy hai; daemon down = requests fail (direct
   leak nahi, kyunki proxy env force hota hai).
+
+## Context overflow fix (v2.3.0)
+
+Free tier `deepseek-v4.1-flash-free` ka asli window models.dev ke 200k se chhota
+hai, isliye lambi session par provider 400 deta tha:
+
+```
+Your request resulted in more tokens than this model's maximum context length allows.
+Please reduce the length of the messages or run compaction.
+```
+
+`bash scripts/fix-context-overflow.sh` do cheezein karta hai:
+
+1. bionic **v2.3.0** binary `$PREFIX/bin/opencode-2.3.0` par install karta hai
+   (sha256 pinned). v2 provider ke context-overflow error ko pakad kar session
+   compact karke turn retry karta hai — manual `/compact` ki zarurat nahi.
+2. `~/.config/opencode/opencode.jsonc` mein free model ka limit clamp karta hai
+   (`context 60000`, `output 8000`, `buffer 4000`) taaki proactive compaction
+   gateway ke reject se pehle chale.
+
+Wrapper (`~/.local/bin/opencode`) aur `scripts/lane.sh` v2 binary ko pehle
+detect karte hain; purana binary `opencode.bak.1.19.5` rollback ke liye rehta hai.

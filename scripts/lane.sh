@@ -19,7 +19,8 @@ if [ ! -d "$DEST" ]; then
 fi
 
 if [ -z "$REAL" ]; then
-  for c in /data/data/com.termux/files/usr/bin/opencode \
+  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode-2.3.0" \
+           /data/data/com.termux/files/usr/bin/opencode \
            "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
            "$HOME/.opencode/bin/opencode"; do
     if [ -x "$c" ] && [ "$(readlink -f "$c" 2>/dev/null)" != "$(readlink -f "$0" 2>/dev/null)" ]; then

@@ -10,7 +10,8 @@ DEST="${OUC_WARP_DEST:-$HOME/.local/share/opencode-unlimited-warp}"
 
 if [ ! -f "$DEST/scripts/lane.sh" ]; then
   REAL=""
-  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
+  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode-2.3.0" \
+           "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
            "$HOME/.opencode/bin/opencode"; do
     if [ -x "$c" ] && [ "$(readlink -f "$c" 2>/dev/null)" != "$(readlink -f "$0" 2>/dev/null)" ]; then
       REAL="$c"
