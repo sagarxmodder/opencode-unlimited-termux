@@ -19,26 +19,34 @@ if [ ! -d "$DEST" ]; then
 fi
 
 # Which opencode runs. Version-agnostic on purpose: whatever `oc-ver` pinned
-# wins, then the plain prefix entry (a symlink or a package binary), then any
-# versioned build left in the prefix. No build is hardcoded as the default.
+# wins, then the newest build folder, then the plain prefix entry (a symlink or
+# a package binary), then any legacy versioned binary. No build is hardcoded.
+is_shim() {
+  [ -f "$1" ] || return 1
+  head -c 400 "$1" 2>/dev/null | grep -q "opencode-unlimited-warp"
+}
+
 resolve_real() {
   local c pick=""
   if [ -n "$REAL" ]; then printf '%s\n' "$REAL"; return 0; fi
-  if [ -f "$DEST/active-bin" ]; then
+  if [ -r "$DEST/active-bin" ]; then
     IFS= read -r c < "$DEST/active-bin" || c=""
-    if [ -n "$c" ] && [ -x "$c" ]; then printf '%s\n' "$c"; return 0; fi
+    if [ -n "$c" ] && [ -x "$c" ] && ! is_shim "$c"; then printf '%s\n' "$c"; return 0; fi
   fi
-  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
-           "$HOME/.opencode/bin/opencode"; do
-    if [ -x "$c" ] && [ "$(readlink -f "$c" 2>/dev/null)" != "$(readlink -f "$0" 2>/dev/null)" ]; then
-      printf '%s\n' "$c"; return 0
-    fi
-  done
-  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin"/opencode-[0-9]*; do
-    [ -x "$c" ] || continue
-    pick="$c"
+  for c in "$DEST"/builds/*/opencode; do
+    [ -x "$c" ] && pick="$c"
   done
   [ -n "$pick" ] && { printf '%s\n' "$pick"; return 0; }
+  for c in "${PREFIX:-}/bin/opencode" \
+           "$HOME/.local/bin/opencode" \
+           "$HOME/.opencode/bin/opencode" \
+           "${PREFIX:-}/bin"/opencode-[0-9]*; do
+    [ -n "$c" ] || continue
+    [ -x "$c" ] || continue
+    is_shim "$c" && continue
+    [ "$(readlink -f "$c" 2>/dev/null)" = "$(readlink -f "$0" 2>/dev/null)" ] && continue
+    printf '%s\n' "$c"; return 0
+  done
   return 1
 }
 
@@ -65,6 +73,10 @@ EOF
   exit 127
 fi
 
+if [ -f "$DEST/.no-warp" ]; then
+  PROXY=""
+  echo "[lane] warp-minimal not available on this arch — running direct" >&2
+else
 if ! curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'; then
   bash "$DEST/scripts/warp-start.sh" >&2 || exit 1
 fi
@@ -75,6 +87,7 @@ export ALL_PROXY="$PROXY"
 export https_proxy="$PROXY"
 export http_proxy="$PROXY"
 export all_proxy="$PROXY"
+fi
 
 # Keep code/dev hosts DIRECT: the WARP exit is for opencode.ai's quota bucket.
 # GitHub API / npm / registries over WARP often get refused (502) which would

@@ -64,9 +64,18 @@ banner
 
 # ---------------------------------------------------------------- 1. env
 section "Environment"
-case "$(uname -m 2>/dev/null)" in
-  aarch64|arm64) ok "architecture: $(uname -m)" ;;
-  *) die "this build is arm64 only (device: $(uname -m 2>/dev/null))" ;;
+ARCH="$(uname -m 2>/dev/null || echo unknown)"
+WARP_OK=1
+case "$ARCH" in
+  aarch64|arm64)
+    ok "architecture: $ARCH (native warp-minimal)" ;;
+  x86_64|amd64)
+    WARP_OK=0
+    PROXY=""
+    warn "architecture: $ARCH — bundled warp-minimal is arm64-only"
+    warn "WARP tunnel skipped: lane runs direct (failover + context guard still active)" ;;
+  *)
+    die "unsupported architecture: $ARCH (arm64 ya x86_64 chahiye)" ;;
 esac
 
 if [ -n "${PREFIX:-}" ]; then
@@ -82,6 +91,7 @@ command -v python3 >/dev/null 2>&1 || die "python3 chahiye: pkg install python"
 command -v curl    >/dev/null 2>&1 || die "curl chahiye: pkg install curl"
 ok "python3 + curl present"
 
+if [ "$WARP_OK" = 1 ]; then
 if ! command -v proot >/dev/null 2>&1; then
   say "proot install kar raha hoon..."
   if command -v pkg >/dev/null 2>&1; then
@@ -91,6 +101,9 @@ if ! command -v proot >/dev/null 2>&1; then
   fi
 fi
 ok "proot: $(command -v proot)"
+else
+  warn "proot skip — WARP tunnel is off on $ARCH"
+fi
 
 CERT="${PREFIX:-/data/data/com.termux/files/usr}/etc/tls/cert.pem"
 if [ -s "$CERT" ]; then
@@ -135,6 +148,7 @@ fi
 
 # ---------------------------------------------------------------- 3. files
 section "Runtime files"
+if [ "$WARP_OK" = 1 ]; then
 if [ -f "$SRC/bin/warp-minimal.sha256" ]; then
   if CHECK_OUT=$(cd "$SRC" && sha256sum -c bin/warp-minimal.sha256 2>&1); then
     ok "binary checksum verified"
@@ -145,9 +159,18 @@ if [ -f "$SRC/bin/warp-minimal.sha256" ]; then
 else
   warn "checksum file missing — verify skipped"
 fi
+else
+  warn "warp-minimal checksum skip (no arm64 tunnel on $ARCH)"
+fi
 
 mkdir -p "$DEST"/{bin,scripts,etc,logs,run,guard,plugin}
-cp "$SRC/bin/warp-minimal" "$DEST/bin/warp-minimal"
+if [ "$WARP_OK" = 1 ]; then
+  cp "$SRC/bin/warp-minimal" "$DEST/bin/warp-minimal"
+  rm -f "$DEST/.no-warp"
+else
+  rm -f "$DEST/bin/warp-minimal"
+  : > "$DEST/.no-warp"
+fi
 cp "$SRC/bin/opencode-shim" "$DEST/bin/opencode-shim"
 cp "$SRC/scripts/"*.sh "$DEST/scripts/"
 [ -f "$SRC/scripts/config-util.py" ] && cp "$SRC/scripts/config-util.py" "$DEST/scripts/"
@@ -156,7 +179,7 @@ cp -r "$SRC/plugin/opencode-warp-retry" "$DEST/plugin/"
 cp "$SRC/uninstall-warp-lane.sh" "$DEST/scripts/uninstall-warp-lane.sh" 2>/dev/null || true
 # freecode was retired — purge any leftover runtime copy
 [ -d "$DEST/freecode" ] && rm -rf "$DEST/freecode"
-chmod 700 "$DEST/bin/warp-minimal" "$DEST/bin/opencode-shim" "$DEST/scripts/"*.sh
+chmod 700 "$DEST/bin/opencode-shim" "$DEST/scripts/"*.sh
 cp "$SRC/scripts/oc-ver" "$DEST/scripts/oc-ver" 2>/dev/null && chmod 700 "$DEST/scripts/oc-ver"
 chmod 700 "$DEST/scripts/config-util.py" 2>/dev/null || true
 ok "runtime → $DEST"
@@ -184,6 +207,7 @@ ok "config + DNS files ready"
 
 # ---------------------------------------------------------------- 4. tunnel
 section "WARP tunnel"
+if [ "$WARP_OK" = 1 ]; then
 bash "$DEST/scripts/warp-stop.sh" >/dev/null 2>&1 || true
 if ! bash "$DEST/scripts/warp-start.sh"; then
   warn "pehli koshish fail — 3s baad retry"
@@ -198,6 +222,10 @@ if [ "$WARP" = "on" ]; then
   ok "egress via WARP: $IP"
 else
   warn "egress trace unexpected: ${TRACE:-no answer}"
+fi
+else
+  warn "tunnel off ($ARCH) — host network direct, koi proxy env nahi"
+  bash "$DEST/scripts/warp-stop.sh" >/dev/null 2>&1 || true
 fi
 
 # ---------------------------------------------------------------- 5. launcher

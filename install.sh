@@ -195,6 +195,21 @@ ln -sf "$DEST/scripts/zen-hop.sh" "$HOME/.local/bin/${BRAND}-hop"
 ln -sf "$DEST/scripts/doctor.sh"  "$HOME/.local/bin/${BRAND}-doctor"
 ok "scripts in $DEST"
 
+# ---------------------------------------------------------------- lane plugin (context trim + quota bypass)
+PLUGINS="$HOME/.config/opencode/plugins"
+mkdir -p "$PLUGINS"
+if [ -n "$SRC" ] && [ -f "$SRC/plugin/opencode-unlimited-lane/index.ts" ]; then
+  cp "$SRC/plugin/opencode-unlimited-lane/index.ts" "$PLUGINS/opencode-unlimited-lane.ts"
+else
+  curl -fsSL "$RAW/plugin/opencode-unlimited-lane/index.ts" -o "$PLUGINS/opencode-unlimited-lane.ts" 2>/dev/null || true
+fi
+if [ -s "$PLUGINS/opencode-unlimited-lane.ts" ]; then
+  chmod 600 "$PLUGINS/opencode-unlimited-lane.ts"
+  ok "lane plugin → $PLUGINS/opencode-unlimited-lane.ts"
+else
+  say "lane plugin fetch skipped (network) — rerun the installer"
+fi
+
 # ---------------------------------------------------------------- sudoers (warp-cli for the unattended guard, read-only iptables
 # verification for the doctor). the iptables entries are exact-args matches —
 # list-only, sudoers will not accept anything else from that rule.

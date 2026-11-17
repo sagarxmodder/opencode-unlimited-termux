@@ -1,39 +1,47 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # managed by opencode-unlimited-warp
 #
 # No args + interactive terminal -> launcher menu (1 = opencode, 2 = status)
 # Any args (run / serve / --version ...) -> straight through the WARP lane.
 # Bypass the menu once with:  OC_MENU_SKIP=1 opencode
-# If the lane runtime is missing, fall back to the stock opencode binary so
+# If the lane runtime is missing, fall back to a build in $DEST/builds so
 # `opencode` never dies with "not found" after a wipe/uninstall.
 DEST="${OUC_WARP_DEST:-$HOME/.local/share/opencode-unlimited-warp}"
 
+is_shim() {
+  [ -f "$1" ] || return 1
+  head -c 400 "$1" 2>/dev/null | grep -q "opencode-unlimited-warp"
+}
+
 if [ ! -f "$DEST/scripts/lane.sh" ]; then
   REAL=""
-  # Same precedence as the lane: pin (oc-ver), plain entry, then versioned builds.
+  # Same precedence as the lane: pin (oc-ver), newest build folder, plain entry.
   if [ -f "$DEST/active-bin" ]; then
     IFS= read -r c < "$DEST/active-bin" || c=""
     [ -n "$c" ] && [ -x "$c" ] && REAL="$c"
   fi
   if [ -z "$REAL" ]; then
-    for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
-             "$HOME/.opencode/bin/opencode"; do
-      if [ -x "$c" ] && [ "$(readlink -f "$c" 2>/dev/null)" != "$(readlink -f "$0" 2>/dev/null)" ]; then
-        REAL="$c"
-        break
-      fi
+    for c in "$DEST"/builds/*/opencode; do
+      [ -x "$c" ] && REAL="$c"
     done
   fi
   if [ -z "$REAL" ]; then
-    for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin"/opencode-[0-9]*; do
-      [ -x "$c" ] && REAL="$c"
+    for c in "${PREFIX:-}/bin/opencode" \
+             "$HOME/.opencode/bin/opencode" \
+             "${PREFIX:-}/bin"/opencode-[0-9]*; do
+      [ -n "$c" ] || continue
+      if [ -x "$c" ] && ! is_shim "$c" \
+         && [ "$(readlink -f "$c" 2>/dev/null)" != "$(readlink -f "$0" 2>/dev/null)" ]; then
+        REAL="$c"
+        break
+      fi
     done
   fi
   if [ -n "$REAL" ]; then
     printf '[!] warp lane missing (%s)\n    stock opencode chal raha hai — repair: bash install-warp-lane.sh\n' "$DEST" >&2
     exec "$REAL" "$@"
   fi
-  printf '[x] opencode not found — install karo: pkg install opencode\n' >&2
+  printf '[x] opencode not found — install karo: pkg install opencode  (Linux: opencode.ai/install)\n' >&2
   exit 127
 fi
 

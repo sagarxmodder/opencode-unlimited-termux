@@ -19,6 +19,11 @@ ok()   { printf '        %s✓%s %s\n' "$CG" "$C0" "$*"; }
 warn() { printf '        %s!%s %s\n' "$CY" "$C0" "$*"; }
 bad()  { printf '        %s✗%s %s\n' "$CR" "$C0" "$*"; }
 
+if [ -f "$DEST/.no-warp" ]; then
+  warn "warp-minimal not installed for this arch — tunnel off, lane direct chalta hai"
+  exit 0
+fi
+
 # Go (warp-minimal) must see Termux's CA bundle; some shells don't export it.
 CERT="${PREFIX:-/data/data/com.termux/files/usr}/etc/tls/cert.pem"
 if [ -s "$CERT" ]; then

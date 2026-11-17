@@ -84,7 +84,10 @@ def apply(cmd, cfg, argv):
         package, proxy = argv[0], argv[1]
         plugins = data.setdefault("plugins", [])
         if not any(isinstance(p, dict) and p.get("package") == package for p in plugins):
-            plugins.append({"package": package, "options": {"proxyUrl": proxy}})
+            entry = {"package": package}
+            if proxy:
+                entry["options"] = {"proxyUrl": proxy}
+            plugins.append(entry)
     elif cmd == "v2-remove":
         package = argv[0]
         plugins = data.get("plugins", [])
