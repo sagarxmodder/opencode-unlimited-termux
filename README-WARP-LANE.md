@@ -211,12 +211,30 @@ Please reduce the length of the messages or run compaction.
 
 `bash scripts/fix-context-overflow.sh` do cheezein karta hai:
 
-1. bionic **v2.3.0** binary `$PREFIX/bin/opencode-2.3.0` par install karta hai
-   (sha256 pinned). v2 provider ke context-overflow error ko pakad kar session
-   compact karke turn retry karta hai — manual `/compact` ki zarurat nahi.
+1. bionic **v2.3.0** binary ko side build `$PREFIX/bin/opencode-2.3.0.bin` par
+   utarta hai (sha256 pinned). v2 provider ke context-overflow error ko pakad kar
+   session compact karke turn retry karta hai — manual `/compact` ki zarurat nahi.
+   **Default build ko hijack nahi karta**; `--activate` dene par hi `oc-ver 2.3.0`
+   chalta hai.
 2. `~/.config/opencode/opencode.jsonc` mein free model ka limit clamp karta hai
    (`context 60000`, `output 8000`, `buffer 4000`) taaki proactive compaction
    gateway ke reject se pehle chale.
 
-Wrapper (`~/.local/bin/opencode`) aur `scripts/lane.sh` v2 binary ko pehle
-detect karte hain; purana binary `opencode.bak.1.19.5` rollback ke liye rehta hai.
+## Build switching (`oc-ver`)
+
+Lane kisi ek version se bandha nahi hai. Jo build `oc-ver` ne pin kiya wahi chalta
+hai; pin na ho to `$PREFIX/bin/opencode` (package binary ya symlink); aur wo bhi
+na mile to prefix mein pada koi bhi `opencode-<version>[.bin]`.
+
+```
+oc-ver                 # builds list karo, active par *
+oc-ver 1.19.5          # us version par switch (substring match)
+oc-ver 2.3.0           # side build par switch
+oc-ver add <path>      # naya binary adopt karo (copy as opencode-<ver>.bin)
+oc-ver reset           # pin hatao, plain entry follow karo
+```
+
+Choice `$DEST/active-bin` mein likhi jaati hai aur plain `$PREFIX/bin/opencode`
+bhi usi build par repoint hota hai, taaki `opencode`, menu aur `pkg` tools ek hi
+build dekhein. Launcher menu mein bhi **Switch opencode build** option hai.
+`doctor.sh` active build + version print karta hai.

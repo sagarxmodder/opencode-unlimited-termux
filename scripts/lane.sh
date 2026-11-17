@@ -18,17 +18,34 @@ if [ ! -d "$DEST" ]; then
   exit 1
 fi
 
-if [ -z "$REAL" ]; then
-  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode-2.3.0" \
-           /data/data/com.termux/files/usr/bin/opencode \
-           "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
+# Which opencode runs. Version-agnostic on purpose: whatever `oc-ver` pinned
+# wins, then the plain prefix entry (a symlink or a package binary), then any
+# versioned build left in the prefix. No build is hardcoded as the default.
+resolve_real() {
+  local c pick=""
+  if [ -n "$REAL" ]; then printf '%s\n' "$REAL"; return 0; fi
+  if [ -f "$DEST/active-bin" ]; then
+    IFS= read -r c < "$DEST/active-bin" || c=""
+    if [ -n "$c" ] && [ -x "$c" ]; then printf '%s\n' "$c"; return 0; fi
+  fi
+  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
            "$HOME/.opencode/bin/opencode"; do
     if [ -x "$c" ] && [ "$(readlink -f "$c" 2>/dev/null)" != "$(readlink -f "$0" 2>/dev/null)" ]; then
-      REAL="$c"
-      break
+      printf '%s\n' "$c"; return 0
     fi
   done
+  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin"/opencode-[0-9]*; do
+    [ -x "$c" ] || continue
+    pick="$c"
+  done
+  [ -n "$pick" ] && { printf '%s\n' "$pick"; return 0; }
+  return 1
+}
+
+if [ -z "$REAL" ]; then
+  REAL="$(resolve_real || true)"
 fi
+export OUC_ACTIVE_BIN="$REAL"
 
 if [ -z "$REAL" ]; then
   cat >&2 <<'EOF'

@@ -157,6 +157,7 @@ cp "$SRC/uninstall-warp-lane.sh" "$DEST/scripts/uninstall-warp-lane.sh" 2>/dev/n
 # freecode was retired — purge any leftover runtime copy
 [ -d "$DEST/freecode" ] && rm -rf "$DEST/freecode"
 chmod 700 "$DEST/bin/warp-minimal" "$DEST/bin/opencode-shim" "$DEST/scripts/"*.sh
+cp "$SRC/scripts/oc-ver" "$DEST/scripts/oc-ver" 2>/dev/null && chmod 700 "$DEST/scripts/oc-ver"
 chmod 700 "$DEST/scripts/config-util.py" 2>/dev/null || true
 ok "runtime → $DEST"
 
@@ -214,10 +215,11 @@ for name in "opencode-unlimited-hop:$DEST/scripts/warp-hop.sh" \
             "opencode-unlimited-doctor:$DEST/scripts/warp-doctor.sh" \
             "opencode-unlimited-start:$DEST/scripts/warp-start.sh" \
             "opencode-unlimited-stop:$DEST/scripts/warp-stop.sh" \
+            "oc-ver:$DEST/scripts/oc-ver" \
             "oc:$DEST/scripts/menu.sh"; do
   ln -sf "${name#*:}" "$HOME/.local/bin/${name%%:*}"
 done
-ok "oc · hop · doctor · start · stop"
+ok "oc · oc-ver · hop · doctor · start · stop"
 
 for rc in "$HOME/.bashrc" "$HOME/.profile"; do
   if ! grep -q "# opencode-unlimited-warp PATH" "$rc" 2>/dev/null; then

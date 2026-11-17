@@ -77,11 +77,25 @@ PY
 fi
 
 # ---- TUI shim
-if [ -f "$HOME/.local/bin/opencode" ] && grep -q "zen-lane" "$HOME/.local/bin/opencode" 2>/dev/null; then
+if [ -f "$HOME/.local/bin/opencode" ] && grep -q "opencode-unlimited-warp" "$HOME/.local/bin/opencode" 2>/dev/null; then
   ok "opencode entry → lane"
 else
   warn "opencode entry doesn't point at the lane — reinstall or check ~/.local/bin/opencode"
 fi
+
+# ---- active build (whatever oc-ver pinned; nothing hardcoded)
+OCBIN=""
+if [ -r "$DEST/active-bin" ]; then IFS= read -r OCBIN < "$DEST/active-bin" || OCBIN=""; fi
+[ -n "$OCBIN" ] && [ -x "$OCBIN" ] || OCBIN="$(readlink -f "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" 2>/dev/null || true)"
+if [ -n "$OCBIN" ] && [ -x "$OCBIN" ]; then
+  OCVERV="$("$OCBIN" --version 2>/dev/null | tail -1)"
+  ok "opencode build: ${OCVERV:-unknown}  ($OCBIN)"
+else
+  warn "no runnable opencode build found — pkg install opencode"
+fi
+command -v oc-ver >/dev/null 2>&1 \
+  && ok "oc-ver present — list/switch builds: oc-ver [version]" \
+  || warn "oc-ver missing — reinstall the lane to get build switching"
 
 # ---- credit system (AGENTS.md)
 [ -f "$HOME/.opencode/AGENTS.md" ] \

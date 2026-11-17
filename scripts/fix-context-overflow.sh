@@ -17,7 +17,9 @@ VERSION="2.3.0"
 SHA256="8d0352e55539858ddf33f5c57d54609008c29f3f507d0dbc2d521e8b4c07717d"
 URL="https://github.com/bd-loser/opencode-bionic/releases/download/v${VERSION}/opencode"
 PREFIX_BIN="${PREFIX:-/data/data/com.termux/files/usr}/bin"
-TARGET="$PREFIX_BIN/opencode-${VERSION}"
+TARGET="$PREFIX_BIN/opencode-${VERSION}.bin"
+ACTIVATE=0
+case "${1:-}" in --activate|-a) ACTIVATE=1 ;; esac
 CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
 CFG="$CFG_DIR/opencode.jsonc"
 
@@ -45,6 +47,21 @@ else
   fi
   install -m 755 "$tmp/opencode" "$TARGET"
   say "installed $("$TARGET" --version)"
+fi
+
+# Never hijack the default build: v$VERSION is parked as a side build unless
+# --activate is passed (or oc-ver moves the pointer later). The lane resolves
+# whatever is pinned, so both builds stay usable.
+if [ "$ACTIVATE" = 1 ]; then
+  OCVER="$(command -v oc-ver 2>/dev/null || true)"
+  [ -n "$OCVER" ] || { [ -x "$PREFIX_BIN/oc-ver" ] && OCVER="$PREFIX_BIN/oc-ver"; }
+  if [ -n "$OCVER" ]; then
+    "$OCVER" "$VERSION" || true
+  else
+    say "oc-ver not installed — activate manually: ln -sfn $TARGET $PREFIX_BIN/opencode"
+  fi
+else
+  say "kept as side build — switch with: oc-ver $VERSION"
 fi
 
 mkdir -p "$CFG_DIR"
@@ -135,5 +152,5 @@ writeFileSync(file, JSON.stringify(config, null, 2) + "\n")
 console.log(`  wrote ${file}`)
 NODE
 
-say "done — restart opencode (or press r in the launcher) to pick up v$VERSION"
-say "rollback: cp $PREFIX_BIN/opencode.bak.v1 $PREFIX_BIN/opencode-2.3.0"
+say "done — restart opencode (or press r in the launcher) to pick up the new config"
+say "builds:  oc-ver list   ·   switch: oc-ver 1.19.5 | oc-ver $VERSION"

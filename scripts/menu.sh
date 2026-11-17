@@ -29,13 +29,17 @@ ITEMS=(
   "Doctor|health + egress"
   "Logs|opencode · lane · plugin"
   "About / updates|credits · GitHub main"
+  "Switch opencode build|1.19.x · 2.3.x · any"
   "Uninstall lane|runtime only"
   "Exit|"
 )
 
 find_opencode() {
-  for c in /data/data/com.termux/files/usr/bin/opencode \
-           "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
+  local pin="$DEST/active-bin" c=""
+  # honour the oc-ver pin first, then the plain entry — version-agnostic
+  if [ -r "$pin" ]; then IFS= read -r c < "$pin" || c=""; fi
+  if [ -n "$c" ] && [ -x "$c" ]; then printf '%s\n' "$c"; return 0; fi
+  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
            "$HOME/.opencode/bin/opencode"; do
     [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
   done
@@ -360,6 +364,23 @@ uninstall_confirm() {
   esac
 }
 
+switch_screen() {
+  local pick ocver="$DEST/scripts/oc-ver"
+  [ -x "$ocver" ] || ocver="$(command -v oc-ver 2>/dev/null || true)"
+  [ "$TTY" = 1 ] && clear
+  if [ -z "$ocver" ]; then
+    printf '  %s✗ oc-ver missing — reinstall the lane (install-warp-lane.sh)%s\n' "$CR" "$C0"
+    pause_key; return
+  fi
+  bash "$ocver" list
+  printf '\n  %sswitch to%s (version, blank = back): ' "$CGY" "$C0"
+  IFS= read -r pick || return 0
+  [ -n "${pick:-}" ] || return 0
+  bash "$ocver" "$pick" || true
+  pause_key
+  refresh_status
+}
+
 run_action() {
   local idx="$1"
   case "$idx" in
@@ -385,8 +406,9 @@ run_action() {
     4) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-doctor.sh"; pause_key; refresh_status ;;
     5) logs_menu; refresh_status ;;
     6) about_screen ;;
-    7) uninstall_confirm ;;
-    8) [ "$TTY" = 1 ] && clear; exit 0 ;;
+    7) switch_screen ;;
+    8) uninstall_confirm ;;
+    9) [ "$TTY" = 1 ] && clear; exit 0 ;;
   esac
 }
 
@@ -394,6 +416,7 @@ refresh_status
 
 if [ "$TTY" = 1 ]; then
   SEL=0
+  N=${#ITEMS[@]}
   while true; do
     draw
     IFS= read -rsn1 key || exit 0
@@ -401,14 +424,14 @@ if [ "$TTY" = 1 ]; then
       $'\x1b')
         read -rsn2 -t 0.05 k2 || k2=""
         case "$k2" in
-          '[A'|'OA') SEL=$(( (SEL + 8) % 9 )) ;;
-          '[B'|'OB') SEL=$(( (SEL + 1) % 9 )) ;;
+          '[A'|'OA') SEL=$(( (SEL + N - 1) % N )) ;;
+          '[B'|'OB') SEL=$(( (SEL + 1) % N )) ;;
         esac
         ;;
-      j|J) SEL=$(( (SEL + 1) % 9 )) ;;
-      k|K) SEL=$(( (SEL + 8) % 9 )) ;;
+      j|J) SEL=$(( (SEL + 1) % N )) ;;
+      k|K) SEL=$(( (SEL + N - 1) % N )) ;;
       '') run_action "$SEL" ;;
-      [0-9]) if [ "$key" = 0 ]; then run_action 8; else run_action $((key - 1)); fi ;;
+      [0-9]) if [ "$key" = 0 ]; then run_action $((N - 1)); else run_action $((key - 1)); fi ;;
       r|R) refresh_status ;;
       q|Q) clear; exit 0 ;;
     esac
@@ -419,7 +442,7 @@ else
     printf '\n  Choose [0-9]: '
     IFS= read -r choice || exit 0
     case "$choice" in
-      0) run_action 8 ;;
+      0) run_action $((${#ITEMS[@]} - 1)) ;;
       1|2|3|4|5|6|7|8|9) run_action $((choice - 1)); refresh_status ;;
     esac
   done

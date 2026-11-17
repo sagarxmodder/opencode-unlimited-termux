@@ -10,14 +10,25 @@ DEST="${OUC_WARP_DEST:-$HOME/.local/share/opencode-unlimited-warp}"
 
 if [ ! -f "$DEST/scripts/lane.sh" ]; then
   REAL=""
-  for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode-2.3.0" \
-           "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
-           "$HOME/.opencode/bin/opencode"; do
-    if [ -x "$c" ] && [ "$(readlink -f "$c" 2>/dev/null)" != "$(readlink -f "$0" 2>/dev/null)" ]; then
-      REAL="$c"
-      break
-    fi
-  done
+  # Same precedence as the lane: pin (oc-ver), plain entry, then versioned builds.
+  if [ -f "$DEST/active-bin" ]; then
+    IFS= read -r c < "$DEST/active-bin" || c=""
+    [ -n "$c" ] && [ -x "$c" ] && REAL="$c"
+  fi
+  if [ -z "$REAL" ]; then
+    for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin/opencode" \
+             "$HOME/.opencode/bin/opencode"; do
+      if [ -x "$c" ] && [ "$(readlink -f "$c" 2>/dev/null)" != "$(readlink -f "$0" 2>/dev/null)" ]; then
+        REAL="$c"
+        break
+      fi
+    done
+  fi
+  if [ -z "$REAL" ]; then
+    for c in "${PREFIX:-/data/data/com.termux/files/usr}/bin"/opencode-[0-9]*; do
+      [ -x "$c" ] && REAL="$c"
+    done
+  fi
   if [ -n "$REAL" ]; then
     printf '[!] warp lane missing (%s)\n    stock opencode chal raha hai — repair: bash install-warp-lane.sh\n' "$DEST" >&2
     exec "$REAL" "$@"

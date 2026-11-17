@@ -1,0 +1,120 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# oc-ver — pick which opencode build the warp lane runs.
+#
+# Works with any number of builds, any version numbers. Nothing is hardcoded:
+# builds are discovered from $PREFIX/bin/opencode-<version>[.bin] and from the
+# plain $PREFIX/bin/opencode entry.
+#
+#   oc-ver                 list builds, mark the active one
+#   oc-ver <match>         switch to the build whose version contains <match>
+#                          (e.g. oc-ver 1.19.5, oc-ver 2.3, oc-ver pkg)
+#   oc-ver add <path>      adopt a binary: copy it in as opencode-<ver>.bin
+#   oc-ver reset           drop the pin, use $PREFIX/bin/opencode as-is
+#
+# The choice lands in $DEST/active-bin, which lane.sh reads first. The plain
+# entry is repointed too, so `opencode`, the menu and pkg-compatible tools all
+# agree on one build.
+set -u
+
+DEST="${OUC_WARP_DEST:-$HOME/.local/share/opencode-unlimited-warp}"
+B="${PREFIX:-/data/data/com.termux/files/usr}/bin"
+PIN="$DEST/active-bin"
+ENTRY="$B/opencode"
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+ver_of() { "$1" --version 2>/dev/null | tail -1; }
+
+is_shim() {
+  [ -f "$1" ] || return 1
+  head -c 400 "$1" 2>/dev/null | grep -q "managed by opencode-unlimited-warp"
+}
+
+# every executable build we can find, de-duplicated, symlinks resolved
+list_bins() {
+  local c real
+  for c in "$B"/opencode-[0-9]* "$ENTRY" "$HOME/.opencode/bin/opencode"; do
+    [ -e "$c" ] || continue
+    [ -x "$c" ] || continue
+    is_shim "$c" && continue
+    real="$(readlink -f "$c" 2>/dev/null || printf '%s' "$c")"
+    printf '%s\n' "$real"
+  done | awk '!seen[$0]++'
+}
+
+active_bin() {
+  local c=""
+  if [ -r "$PIN" ]; then IFS= read -r c < "$PIN" || c=""; fi
+  if [ -n "$c" ] && [ -x "$c" ]; then printf '%s\n' "$c"; return 0; fi
+  if [ -e "$ENTRY" ]; then readlink -f "$ENTRY" 2>/dev/null || printf '%s\n' "$ENTRY"; fi
+}
+
+list_versions() {
+  local c
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    printf '%s\t%s\n' "$(ver_of "$c")" "$c"
+  done < <(list_bins)
+}
+
+cmd_show() {
+  local act cur v p
+  act="$(active_bin)"
+  printf 'active:  %s\n' "${act:-none}"
+  [ -n "$act" ] && printf 'version: %s\n' "$(ver_of "$act")"
+  printf 'lane:    %s\n' "$([ -f "$DEST/scripts/lane.sh" ] && echo present || echo missing)"
+  printf 'builds:\n'
+  cur=""
+  while IFS=$'\t' read -r v p; do
+    [ -n "${p:-}" ] || continue
+    [ "$p" = "$act" ] && cur="*" || cur=" "
+    printf ' %s %-24s %s\n' "$cur" "${v:-unknown}" "$p"
+  done < <(list_versions)
+}
+
+cmd_switch() {
+  local want="$1" best="" p v
+  while IFS=$'\t' read -r v p; do
+    [ -n "${p:-}" ] || continue
+    case "$v" in *"$want"*) best="$p" ;; esac
+    case "${p##*/}" in *"$want"*) best="$p" ;; esac
+  done < <(list_versions)
+  [ -n "$best" ] || die "no build matching '$want' — try: oc-ver"
+  mkdir -p "$DEST" 2>/dev/null || true
+
+  # keep a package binary instead of silently shadowing it
+  if [ -f "$ENTRY" ] && [ ! -L "$ENTRY" ] && ! is_shim "$ENTRY"; then
+    [ -e "$B/opencode-pkg.bin" ] || cp -f "$ENTRY" "$B/opencode-pkg.bin" 2>/dev/null || true
+  fi
+
+  ln -sfn "$best" "$ENTRY" || die "cannot write $ENTRY"
+  printf '%s\n' "$best" > "$PIN" 2>/dev/null || true
+  printf 'switched: %s\n' "$(ver_of "$best")"
+  printf 'binary:   %s\n' "$best"
+}
+
+cmd_add() {
+  local src="${1:-}" v dst
+  [ -n "$src" ] || die "usage: oc-ver add <path-to-binary>"
+  [ -x "$src" ] || die "not executable: $src"
+  v="$(ver_of "$src")"
+  [ -n "$v" ] || die "cannot read a version out of $src"
+  v="$(printf '%s' "$v" | tr ' ' '_' | tr -d '/')"
+  dst="$B/opencode-${v}.bin"
+  cp -f "$src" "$dst"
+  chmod 755 "$dst"
+  printf 'adopted: %s\n' "$dst"
+}
+
+cmd_reset() {
+  rm -f "$PIN"
+  printf 'pin cleared — lane follows %s\n' "$(readlink -f "$ENTRY" 2>/dev/null || echo "$ENTRY")"
+}
+
+case "${1:-}" in
+  ""|list|status|-l) cmd_show ;;
+  add)  shift; cmd_add "${1:-}" ;;
+  reset) cmd_reset ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) cmd_switch "$1" ;;
+esac
