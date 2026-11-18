@@ -77,16 +77,39 @@ if [ -f "$DEST/.no-warp" ]; then
   PROXY=""
   echo "[lane] warp-minimal not available on this arch — running direct" >&2
 else
-if ! curl -s --noproxy '*' -m 2 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'; then
-  bash "$DEST/scripts/warp-start.sh" >&2 || exit 1
-fi
+lane_healthy() {
+  curl -s --noproxy '*' -m 1 "$PROXY/health" 2>/dev/null | grep -q '"healthy":[1-9]'
+}
 
+# Hot path never blocks: the guard owns restarting/repairing the tunnel. If it
+# is not healthy right now (e.g. Cloudflare registration 503 -> 0 exits) just
+# run direct so the CLI always opens; `oc-heal` or the menu can fix it.
+if lane_healthy; then
 export HTTPS_PROXY="$PROXY"
 export HTTP_PROXY="$PROXY"
 export ALL_PROXY="$PROXY"
 export https_proxy="$PROXY"
 export http_proxy="$PROXY"
 export all_proxy="$PROXY"
+else
+  # Tunnel down (e.g. Cloudflare registration 503 -> 0 exits). Never block the
+  # CLI: run direct now, heal in the background so the next launch has a tunnel.
+  echo "[lane] WARP tunnel down — direct mode, healing in background (manual: oc-heal)" >&2
+  unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
+  if [ -x "$DEST/scripts/warp-start.sh" ]; then
+    LOCK="$DEST/run/lane-heal.lock"
+    if mkdir "$LOCK" 2>/dev/null; then
+      nohup bash -c "echo \$\$ > '$LOCK/pid'; bash '$DEST/scripts/warp-start.sh'; rm -rf '$LOCK'" \
+        >> "$DEST/logs/lane-heal.log" 2>&1 &
+    else
+      HPID=$(cat "$LOCK/pid" 2>/dev/null || echo 0)
+      case "$HPID" in ''|*[!0-9]*) HPID=0 ;; esac
+      if [ "$HPID" -gt 0 ] && ! kill -0 "$HPID" 2>/dev/null; then
+        rm -rf "$LOCK"
+      fi
+    fi
+  fi
+fi
 fi
 
 # Keep code/dev hosts DIRECT: the WARP exit is for opencode.ai's quota bucket.

@@ -244,6 +244,7 @@ for name in "opencode-unlimited-hop:$DEST/scripts/warp-hop.sh" \
             "opencode-unlimited-start:$DEST/scripts/warp-start.sh" \
             "opencode-unlimited-stop:$DEST/scripts/warp-stop.sh" \
             "oc-ver:$DEST/scripts/oc-ver" \
+            "oc-heal:$DEST/scripts/heal.sh" \
             "oc:$DEST/scripts/menu.sh"; do
   ln -sf "${name#*:}" "$HOME/.local/bin/${name%%:*}"
 done

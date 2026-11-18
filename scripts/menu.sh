@@ -27,6 +27,7 @@ ITEMS=(
   "Restart WARP lane|daemon + guard"
   "Rotate WARP /64|naya identity"
   "Doctor|health + egress"
+  "Heal lane|one pass: tunnel · build · shim"
   "Logs|opencode · lane · plugin"
   "About / updates|credits · GitHub main"
   "Switch opencode build|1.19.x · 2.3.x · any"
@@ -404,11 +405,12 @@ run_action() {
     2) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-start.sh"; pause_key; refresh_status ;;
     3) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-hop.sh"; pause_key; refresh_status ;;
     4) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/warp-doctor.sh"; pause_key; refresh_status ;;
-    5) logs_menu; refresh_status ;;
-    6) about_screen ;;
-    7) switch_screen ;;
-    8) uninstall_confirm ;;
-    9) [ "$TTY" = 1 ] && clear; exit 0 ;;
+    5) [ "$TTY" = 1 ] && clear; bash "$DEST/scripts/heal.sh"; pause_key; refresh_status ;;
+    6) logs_menu; refresh_status ;;
+    7) about_screen ;;
+    8) switch_screen ;;
+    9) uninstall_confirm ;;
+    10) [ "$TTY" = 1 ] && clear; exit 0 ;;
   esac
 }
 
@@ -439,11 +441,11 @@ if [ "$TTY" = 1 ]; then
 else
   while true; do
     banner; status_panel; draw_items
-    printf '\n  Choose [0-9]: '
+    printf '\n  Choose [0-9] (or 10): '
     IFS= read -r choice || exit 0
     case "$choice" in
       0) run_action $((${#ITEMS[@]} - 1)) ;;
-      1|2|3|4|5|6|7|8|9) run_action $((choice - 1)); refresh_status ;;
+      1|2|3|4|5|6|7|8|9|10) run_action $((choice - 1)); refresh_status ;;
     esac
   done
 fi
