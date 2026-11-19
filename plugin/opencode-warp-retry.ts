@@ -20,27 +20,36 @@ import { dirname } from "node:path"
 type Options = {
   proxyUrl?: string
   recyclePath?: string
+  healthPath?: string
   curl?: string
   logFile?: string
   retryDelayMs?: number
+  networkRetryDelayMs?: number
   maxRotations?: number
+  maxNetworkRetries?: number
   requireProxyEnv?: boolean
+  requireProxyHealth?: boolean
 }
 
 const DEFAULT_PROXY_URL = "http://127.0.0.1:8789"
 const DEFAULT_RECYCLE_PATH = "/recycle"
+const DEFAULT_HEALTH_PATH = "/health"
 const DEFAULT_RETRY_DELAY_MS = 1_200
+const DEFAULT_NETWORK_RETRY_DELAY_MS = 900
 const DEFAULT_MAX_ROTATIONS = 2
+const DEFAULT_MAX_NETWORK_RETRIES = 3
 const TRACE_TIMEOUT_MS = 8_000
 const TRACE_POLL_MS = 750
 const TRACE_POLL_ATTEMPTS = 24
 const SETTLE_MS = 800
+const HEALTH_TIMEOUT_MS = 3_000
 
 const state = (() => {
   const key = Symbol.for("opencode.warp-retry.state")
   const g = globalThis as Record<symbol, unknown>
-  if (!g[key]) g[key] = { inFlight: null as Promise<boolean> | null }
-  return g[key] as { inFlight: Promise<boolean> | null }
+  const fresh = { inFlight: null as Promise<boolean> | null, netStreak: 0, netAt: 0 }
+  if (!g[key]) g[key] = fresh
+  return g[key] as typeof fresh
 })()
 
 function envValue(...names: string[]) {
@@ -55,14 +64,18 @@ function resolveConfig(options: Options) {
   return {
     proxyUrl: options.proxyUrl ?? envValue("WARP_RETRY_PROXY") ?? DEFAULT_PROXY_URL,
     recyclePath: options.recyclePath ?? envValue("WARP_RETRY_RECYCLE_PATH") ?? DEFAULT_RECYCLE_PATH,
+    healthPath: options.healthPath ?? envValue("WARP_RETRY_HEALTH_PATH") ?? DEFAULT_HEALTH_PATH,
     curl: options.curl ?? envValue("WARP_RETRY_CURL") ?? "curl",
     logFile:
       options.logFile ??
       envValue("WARP_RETRY_LOG") ??
       `${homedir()}/.local/share/opencode-unlimited-warp/logs/retry-plugin.log`,
     retryDelayMs: options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
+    networkRetryDelayMs: options.networkRetryDelayMs ?? DEFAULT_NETWORK_RETRY_DELAY_MS,
     maxRotations: Math.min(5, Math.max(1, options.maxRotations ?? DEFAULT_MAX_ROTATIONS)),
-    requireProxyEnv: options.requireProxyEnv ?? envValue("WARP_RETRY_REQUIRE_PROXY") !== "false",
+    maxNetworkRetries: Math.min(8, Math.max(0, options.maxNetworkRetries ?? DEFAULT_MAX_NETWORK_RETRIES)),
+    requireProxyEnv: options.requireProxyEnv ?? envValue("WARP_RETRY_REQUIRE_PROXY") === "true",
+    requireProxyHealth: options.requireProxyHealth ?? envValue("WARP_RETRY_REQUIRE_HEALTH") !== "false",
   }
 }
 
@@ -89,7 +102,27 @@ function run(file: string, args: string[], timeout: number) {
   })
 }
 
-function proxyMatches(proxyUrl: string) {
+// The proxy is what matters, not the env vars. opencode only exports
+// HTTP(S)_PROXY when the lane shim launched it, so an env match test wrongly
+// disables retry on every direct/manual launch. Ask the proxy itself instead.
+async function proxyHealth(config: Config) {
+  const result = await run(
+    config.curl,
+    ["-sS", "-m", "3", "--noproxy", "*", `${config.proxyUrl}${config.healthPath}`],
+    HEALTH_TIMEOUT_MS,
+  )
+  if (!result.ok) return false
+  try {
+    const body = JSON.parse(result.output) as { ok?: boolean; healthy?: number }
+    if (body?.ok === false) return false
+    if (typeof body?.healthy === "number") return body.healthy > 0
+    return true
+  } catch {
+    return /\bok\b/i.test(result.output)
+  }
+}
+
+function proxyEnvMatches(proxyUrl: string) {
   try {
     const url = new URL(proxyUrl)
     const port = url.port || "80"
@@ -178,12 +211,50 @@ function isFreeLimit(error: { type?: string; message?: unknown }) {
   )
 }
 
+// WARP tears the MASQUE tunnel down on its own schedule ("connection reset by
+// peer", "connection aborted", 30m cooldown then re-enroll). opencode sees that
+// as a bare socket/transport failure and surfaces it as ECONNRESET even though
+// the proxy came back healthy a second later. Those are safe to replay: the
+// request either never reached the provider or failed before any token stream.
+function errorText(error: unknown, depth = 0): string {
+  if (!error || depth > 4) return ""
+  if (typeof error === "string") return error
+  const e = error as Record<string, unknown>
+  const parts = [e.name, e.type, e.code, e.message, e.errno, e.cause]
+    .map((value) => (value && typeof value === "object" ? errorText(value, depth + 1) : String(value ?? "")))
+    .filter(Boolean)
+  return parts.join(" ")
+}
+
+function isNetworkReset(error: unknown) {
+  const e = (error ?? {}) as Record<string, unknown>
+  if (e.type === "provider.network" || e.type === "provider.transport") return true
+  const text = errorText(error)
+  if (!text) return false
+  return /ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|UND_ERR_SOCKET|UND_ERR_CLOSED|SocketError/i.test(text) ||
+    /socket (connection was )?closed|other side closed|fetch failed|connection reset by peer|connection aborted|network (error|unreachable)|terminated|proxy.*\b(502|503|504)\b|\b(502|503|504)\b.*proxy/i.test(text)
+}
+
+function countNetworkRetry(config: Config) {
+  const now = Date.now()
+  // A burst of resets from one tunnel teardown is one event; a wider window
+  // means a genuinely dead upstream and we should stop replaying.
+  if (now - state.netAt > 120_000) state.netStreak = 0
+  state.netAt = now
+  state.netStreak += 1
+  if (state.netStreak > config.maxNetworkRetries) {
+    log(config, `network reset streak ${state.netStreak} exceeded ${config.maxNetworkRetries}; surfacing error`)
+    return false
+  }
+  return true
+}
+
 async function setup(ctx: any) {
   const options = (ctx?.options ?? {}) as Options
   const config = resolveConfig(options)
 
-  if (config.requireProxyEnv && !proxyMatches(config.proxyUrl)) {
-    log(config, `no proxy env matches ${config.proxyUrl}; auto-retry disabled`)
+  if (config.requireProxyEnv && !proxyEnvMatches(config.proxyUrl)) {
+    log(config, `no proxy env matches ${config.proxyUrl}; auto-retry disabled by WARP_RETRY_REQUIRE_PROXY`)
     return
   }
 
@@ -193,17 +264,52 @@ async function setup(ctx: any) {
     return
   }
 
-  log(config, "plugin loaded; free-limit -> /recycle -> retry enabled")
+  // Informational only. The lane may be down right now and come back mid
+  // session, so a cold proxy must not disable retry for the whole process.
+  const healthy = await proxyHealth(config)
+  log(
+    config,
+    healthy
+      ? `plugin loaded; proxy healthy at ${config.proxyUrl}; free-limit -> recycle, network reset -> retry`
+      : `plugin loaded; proxy not healthy yet at ${config.proxyUrl}; retry armed, will recover when lane returns`,
+  )
 
   await hook("retry", async (event: any) => {
-    if (!isFreeLimit(event?.error ?? {})) return
-    log(config, `free limit on attempt ${event.attempt}; rotating`)
-    const ready = await ensureRotation(config)
-    if (!ready) {
-      log(config, "rotation not ready; letting the original error surface")
+    const error = event?.error ?? {}
+
+    if (isFreeLimit(error)) {
+      log(config, `free limit on attempt ${event.attempt}; rotating`)
+      const ready = await ensureRotation(config)
+      if (!ready) {
+        log(config, "rotation not ready; letting the original error surface")
+        return
+      }
+      event.decision = { retry: true, delay: config.retryDelayMs }
       return
     }
-    event.decision = { retry: true, delay: config.retryDelayMs }
+
+    if (isNetworkReset(error)) {
+      if (!countNetworkRetry(config)) return
+      const attempt = event?.attempt ?? "?"
+      // Short backoff: the tunnel is usually back before the proxy reports it.
+      // Only pay for a full recycle when the proxy itself is gone.
+      const alive = await proxyHealth(config)
+      log(
+        config,
+        `network reset on attempt ${attempt} (${errorText(error).slice(0, 160)}); proxy ${alive ? "healthy" : "unhealthy"}; retry ${state.netStreak}/${config.maxNetworkRetries}`,
+      )
+      if (!alive) {
+        const ready = await ensureRotation(config)
+        if (!ready) {
+          log(config, "rotation not ready; letting the network error surface")
+          return
+        }
+      }
+      event.decision = {
+        retry: true,
+        delay: config.networkRetryDelayMs * Math.min(3, state.netStreak),
+      }
+    }
   })
 }
 
